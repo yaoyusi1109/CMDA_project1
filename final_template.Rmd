@@ -13,6 +13,9 @@ output:
         google: Prompt
       code_font:
         google: JetBrains Mono
+editor_options: 
+  markdown: 
+    wrap: 72
 ---
 
 ```{r setup, include=FALSE}
@@ -35,13 +38,14 @@ data <- read_csv("data/annual_conc_by_monitor_2024.csv")
 
 # Introduction & Abstract
 
-
-Column {data-width=350}
------------------------------------------------------------------------
+## Column {data-width="350"}
 
 ### Abstract
 
-This dashboard analyzes the EPA Annual Concentration dataset for 2024, summarizing pollutant measurements across U.S. monitoring sites. We explore geographic patterns, pollutant trends, and apply statistical models to understand air quality outcomes and predictors.
+This dashboard analyzes the EPA Annual Concentration dataset for 2024,
+summarizing pollutant measurements across U.S. monitoring sites. We
+explore geographic patterns, pollutant trends, and apply statistical
+models to understand air quality outcomes and predictors.
 
 ### Data Dictionary
 
@@ -77,8 +81,7 @@ kbl(data_dictionary) %>%
   kable_styling(bootstrap_options = c("striped", "hover"))
 ```
 
-Column {data-width=650}
------------------------------------------------------------------------
+## Column {data-width="650"}
 
 ### Map of Monitoring Stations
 
@@ -92,166 +95,238 @@ leaflet(data) %>%
   )
 ```
 
-
 # Multiple Regression
 
-Column {data-width=650}
--------------------------------------
+## Column {data-width="650"}
 
 ### Description
 
-1. Multiple Linear Regression
+1.  Multiple Linear Regression
 
-Research Question:
-Can we predict the annual average concentration (Arithmetic Mean) of PM2.5 based on location and temporal variables?
+Research Question: Can we predict the annual average concentration
+(Arithmetic Mean) of PM2.5 based on location and temporal variables?
 
-Modeling Approach:
-	•	Response Variable: Arithmetic Mean
-	•	Predictor Variables: Latitude, Longitude, Year, Observation Count, 1st Max Value, 90th Percentile, 10th Percentile
+Modeling Approach: • Response Variable: Arithmetic Mean • Predictor
+Variables: Latitude, Longitude, Year, Observation Count, 1st Max Value,
+90th Percentile, 10th Percentile
 
-Justification:
-This model aims to understand how geographical and temporal factors influence PM2.5 concentrations.
+Justification: This model aims to understand how geographical and
+temporal factors influence PM2.5 concentrations.
 
----
-
-
-
-
-
-
-
+------------------------------------------------------------------------
 
 # Ridge Regression
 
-Column {data-width=650}
--------------------------------------
-2. Ridge Regression (using glmnet)
+## Column {data-width="650"}
 
-Research Question:
-Does incorporating multiple correlated predictors improve the prediction of PM2.5 concentrations?
+2.  Ridge Regression (using glmnet)
 
-Modeling Approach:
-- Response Variable: Arithmetic Mean
-- Predictor Variables: 1st Max Value, 2nd Max Value, 3rd Max Value, 4th Max Value, 90th Percentile, 75th Percentile, 50th Percentile, 10th Percentile, Observation Count
+Research Question: Does incorporating multiple correlated predictors
+improve the prediction of PM2.5 concentrations?
 
-Justification:
-Ridge regression is suitable for handling multicollinearity among predictors, potentially enhancing model performance.
+Modeling Approach: - Response Variable: Arithmetic Mean - Predictor
+Variables: 1st Max Value, 2nd Max Value, 3rd Max Value, 4th Max Value,
+90th Percentile, 75th Percentile, 50th Percentile, 10th Percentile,
+Observation Count
 
----
+Justification: Ridge regression is suitable for handling
+multicollinearity among predictors, potentially enhancing model
+performance.
+
+------------------------------------------------------------------------
 
 # Natural Spline or LOESS
 
-Column {data-width=650}
--------------------------------------
+## Column {data-width="650"}
 
-3. Natural Cubic Spline or LOESS Fit
+3.  Natural Cubic Spline or LOESS Fit
 
-Research Question:
-How do PM2.5 concentrations vary over time within a specific location?
+Research Question: How do PM2.5 concentrations vary over time within a
+specific location?
 
-Modeling Approach:
-- Response Variable: Arithmetic Mean
-- Predictor Variable: Date (converted from 1st Max DateTime)
-- Method: Apply a natural cubic spline or LOESS smoothing to model temporal trends.
+Modeling Approach: - Response Variable: Arithmetic Mean - Predictor
+Variable: Date (converted from 1st Max DateTime) - Method: Apply a
+natural cubic spline or LOESS smoothing to model temporal trends.
 
-Justification:
-This approach captures non-linear temporal patterns in pollutant concentrations.
+Justification: This approach captures non-linear temporal patterns in
+pollutant concentrations.
 
----
+------------------------------------------------------------------------
 
 # kNN
 
-Column {data-width=650}
--------------------------------------
+## Column {data-width="650"}
 
-4. k-Nearest Neighbors (kNN) Classification
+4.  k-Nearest Neighbors (kNN) Classification
 
-Research Question:
-Can we classify days as ‘High’ or ‘Low’ pollution based on observed metrics?
+Research Question: Can we classify days as ‘High’ or ‘Low’ pollution
+based on observed metrics?
 
-Modeling Approach:
-	•	Response Variable: Pollution Level (categorical: ‘High’ if Arithmetic Mean > threshold, else ‘Low’)
-	•	Predictor Variables: 1st Max Value, 90th Percentile, Observation Count, Latitude, Longitude
+Modeling Approach: • Response Variable: Pollution Level (categorical:
+‘High’ if Arithmetic Mean \> threshold, else ‘Low’) • Predictor
+Variables: 1st Max Value, 90th Percentile, Observation Count, Latitude,
+Longitude
 
-Justification:
-kNN can classify pollution levels based on similarity in observed features.
+Justification: kNN can classify pollution levels based on similarity in
+observed features.
 
----
+------------------------------------------------------------------------
 
 # Naive Bayes
 
-Column {data-width=650}
--------------------------------------
-5. Naive Bayes Classification
 
-Research Question:
-Can we predict the Parameter Name (type of pollutant) based on statistical features?
+## Overview
 
-Modeling Approach:
-	- Response Variable: Parameter Name
-	- Predictor Variables: Arithmetic Mean, 1st Max Value, 90th Percentile, Observation Count
+- **Research Question:** Can we predict the pollutant type (`Parameter Name`) based on statistical features?
+- **Modeling Approach:** Naive Bayes classifier, using predictors: Arithmetic Mean, 1st Max Value, 90th Percentile, Observation Count, etc.
+- **Justification:** Naive Bayes is effective for multi-class classification with categorical outcomes.
 
-Justification:
-Naive Bayes is effective for multi-class classification problems with categorical outcomes.
 
----
+```{r}
+library(e1071) # For naive bayes
+
+# Selecting relvant columns and removing NANs
+nb_data <- data %>%
+  select(`Parameter Name`,
+         `Arithmetic Mean`, `1st Max Value`, `90th Percentile`, `Observation Count`,
+         `POC`, `Latitude`, `Longitude`,
+         `Sample Duration`, `Metric Used`, `Method Name`, `Observation Percent`,
+         `Completeness Indicator`, `Required Day Count`, `Year`, `Units of Measure`, `Event Type`) %>%
+  na.omit()
+
+# Convert Response to factor
+nb_data$`Parameter Name` = as.factor(nb_data$`Parameter Name`)
+
+# Train/Test split
+set.seed(1)
+split_idx = sample(1:nrow(nb_data), size = 0.8 * nrow(nb_data))
+train_data = nb_data[split_idx, ]
+test_data = nb_data[-split_idx, ]
+
+# Naive Bayes Model
+nb_model = naiveBayes(`Parameter Name` ~ ., data = train_data)
+
+# Predict on test set
+nb_pred = predict(nb_model, test_data)
+
+# Create summary table
+results <- data.frame(
+  Actual = test_data$`Parameter Name`,
+  Predicted = nb_pred
+)
+
+accuracy <- mean(results$Actual == results$Predicted)
+summary_table <- data.frame(
+  Metric = c("Total Test Samples", "Overall Accuracy"),
+  Value = c(nrow(results), paste0(round(accuracy * 100, 2), "%"))
+)
+
+# kbl(summary_table) %>%
+#   kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+### Top 10 Most Frequently Predicted Pollutant Types
+
+```{r}
+# Show top 10 most frequent predicted classes
+predicted_summary <- results %>%
+  count(Predicted, sort = TRUE) %>%
+  head(10)
+
+kbl(predicted_summary) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+### Misclassification Table (Top Errors)
+
+```{r}
+error_counts <- results %>%
+  filter(Actual != Predicted) %>%
+  count(Actual, Predicted, sort = TRUE) %>%
+  top_n(5, n)
+
+if (nrow(error_counts) > 0) {
+  kbl(error_counts, caption = "Top 5 Misclassifications") %>%
+    kable_styling(bootstrap_options = c("striped", "hover"))
+} else {
+  print("No major misclassifications to display.")
+}
+```
+
+Column {data-width=450}
+-----------------------------------------------------------------------
+
+```{r, height=300}
+# plot
+
+error_counts <- results %>%
+  filter(Actual != Predicted) %>%
+  count(Actual, Predicted, sort = TRUE) %>%
+  top_n(10, n)
+
+if (nrow(error_counts) > 0) {
+  ggplot(error_counts, aes(x = reorder(paste(Actual, "->", Predicted), n), y = n, fill = n)) +
+    geom_col() +
+    coord_flip() +
+    scale_fill_gradient(low = "#DDEBF7", high = "#2E75B6") +
+    labs(title = "Top 10 Misclassifications", x = "Actual -> Predicted", y = "Count") +
+    theme_minimal()
+} else {
+  print("No major misclassifications to display.")
+}
+```
+
+### Discussion and Visualization
+
+The Naive Bayes classifier achieved an overall accuracy of **`r round(accuracy * 100, 2)`%**.
+
+
+
+------------------------------------------------------------------------
 
 # Logistic Regression
 
-Column {data-width=650}
--------------------------------------
+## Column {data-width="650"}
 
-6. Logistic Regression Classification
+6.  Logistic Regression Classification
 
-Research Question:
-What factors influence the likelihood of exceeding primary pollutant standards?
+Research Question: What factors influence the likelihood of exceeding
+primary pollutant standards?
 
-Modeling Approach:
-	- Response Variable: Exceedance (binary: 1 if Primary Exceedance Count > 0, else 0)
-	- Predictor Variables: Arithmetic Mean, 1st Max Value, Observation Count, Parameter Name (encoded)
+Modeling Approach: - Response Variable: Exceedance (binary: 1 if Primary
+Exceedance Count \> 0, else 0) - Predictor Variables: Arithmetic Mean,
+1st Max Value, Observation Count, Parameter Name (encoded)
 
-Justification:
-Logistic regression models the probability of a binary outcome based on predictor variables.
+Justification: Logistic regression models the probability of a binary
+outcome based on predictor variables.
 
+# Page 1 {data-navmenu="Menu A" data-navmenu-icon="fa-bookmark"}
 
-Page 1 {data-navmenu="Menu A" data-navmenu-icon="fa-bookmark"}
-=====================================
+# Page 2 {#page-2 data-navmenu="Menu A"}
 
+# Page 3 {data-navmenu="Menu B" data-navmenu="fa-cog"}
 
-Page 2 {data-navmenu="Menu A"}
-=====================================  
+# Page 4 {data-navmenu="Menu B"}
 
-
-Page 3 {data-navmenu="Menu B" data-navmenu="fa-cog"}
-=====================================
-
-
-Page 4 {data-navmenu="Menu B"}
-=====================================  
-
-Page 1
-===================================== 
+# Page 1
 
 You can link to a dashboard page with either of the following syntaxes:
 
-[Page 2]
+[Page 2](#page-2)
 
 [Page Two](#page-2)
 
-The second syntax is used when you want a custom name for the link 
+The second syntax is used when you want a custom name for the link
 (rather than just using the page title).
 
 ### Chart A
-    
+
 ```{r}
 ```
 
-Page 2
-=====================================     
+# Page 2
 
 ### Chart B
-    
+
 ```{r}
 ```
-
-
