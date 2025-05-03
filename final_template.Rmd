@@ -228,7 +228,6 @@ summary_table <- data.frame(
 ### Top 10 Most Frequently Predicted Pollutant Types
 
 ```{r}
-# Show top 10 most frequent predicted classes
 predicted_summary <- results %>%
   count(Predicted, sort = TRUE) %>%
   head(10)
