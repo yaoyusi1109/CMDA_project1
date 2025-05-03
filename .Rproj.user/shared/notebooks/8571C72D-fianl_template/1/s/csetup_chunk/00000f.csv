@@ -1,0 +1,4 @@
+"0","library(flexdashboard)"
+"0","# Install thematic and un-comment for themed static plots (i.e., ggplot2)"
+"0","# thematic::thematic_rmd()"
+"0",""

@@ -1,0 +1,184 @@
+---
+title: "Final Template"
+author: "Yusi Yao, Xavier, Keshavd"
+output:
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+    self_contained: true
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+# Install thematic and un-comment for themed static plots (i.e., ggplot2)
+# thematic::thematic_rmd()
+
+```
+
+```{r, echo=FALSE, message=FALSE}
+library(readr)
+data <- read_csv("data/annual_conc_by_monitor_2024.csv")
+```
+
+# Multiple Regression
+
+Column {data-width=650}
+-------------------------------------
+
+### Description
+
+1. Multiple Linear Regression
+
+Research Question:
+Can we predict the annual average concentration (Arithmetic Mean) of PM2.5 based on location and temporal variables?
+
+Modeling Approach:
+	•	Response Variable: Arithmetic Mean
+	•	Predictor Variables: Latitude, Longitude, Year, Observation Count, 1st Max Value, 90th Percentile, 10th Percentile
+
+Justification:
+This model aims to understand how geographical and temporal factors influence PM2.5 concentrations.
+
+---
+
+
+
+
+
+
+
+
+# Ridge Regression
+
+Column {data-width=650}
+-------------------------------------
+2. Ridge Regression (using glmnet)
+
+Research Question:
+Does incorporating multiple correlated predictors improve the prediction of PM2.5 concentrations?
+
+Modeling Approach:
+- Response Variable: Arithmetic Mean
+- Predictor Variables: 1st Max Value, 2nd Max Value, 3rd Max Value, 4th Max Value, 90th Percentile, 75th Percentile, 50th Percentile, 10th Percentile, Observation Count
+
+Justification:
+Ridge regression is suitable for handling multicollinearity among predictors, potentially enhancing model performance.
+
+---
+
+# Natural Spline or LOESS
+
+Column {data-width=650}
+-------------------------------------
+
+3. Natural Cubic Spline or LOESS Fit
+
+Research Question:
+How do PM2.5 concentrations vary over time within a specific location?
+
+Modeling Approach:
+- Response Variable: Arithmetic Mean
+- Predictor Variable: Date (converted from 1st Max DateTime)
+- Method: Apply a natural cubic spline or LOESS smoothing to model temporal trends.
+
+Justification:
+This approach captures non-linear temporal patterns in pollutant concentrations.
+
+---
+
+# kNN
+
+Column {data-width=650}
+-------------------------------------
+
+4. k-Nearest Neighbors (kNN) Classification
+
+Research Question:
+Can we classify days as ‘High’ or ‘Low’ pollution based on observed metrics?
+
+Modeling Approach:
+	•	Response Variable: Pollution Level (categorical: ‘High’ if Arithmetic Mean > threshold, else ‘Low’)
+	•	Predictor Variables: 1st Max Value, 90th Percentile, Observation Count, Latitude, Longitude
+
+Justification:
+kNN can classify pollution levels based on similarity in observed features.
+
+---
+
+# Naive Bayes
+
+Column {data-width=650}
+-------------------------------------
+5. Naive Bayes Classification
+
+Research Question:
+Can we predict the Parameter Name (type of pollutant) based on statistical features?
+
+Modeling Approach:
+	- Response Variable: Parameter Name
+	- Predictor Variables: Arithmetic Mean, 1st Max Value, 90th Percentile, Observation Count
+
+Justification:
+Naive Bayes is effective for multi-class classification problems with categorical outcomes.
+
+---
+
+# Logistic Regression
+
+Column {data-width=650}
+-------------------------------------
+
+6. Logistic Regression Classification
+
+Research Question:
+What factors influence the likelihood of exceeding primary pollutant standards?
+
+Modeling Approach:
+	- Response Variable: Exceedance (binary: 1 if Primary Exceedance Count > 0, else 0)
+	- Predictor Variables: Arithmetic Mean, 1st Max Value, Observation Count, Parameter Name (encoded)
+
+Justification:
+Logistic regression models the probability of a binary outcome based on predictor variables.
+
+
+Page 1 {data-navmenu="Menu A" data-navmenu-icon="fa-bookmark"}
+=====================================
+
+
+Page 2 {data-navmenu="Menu A"}
+=====================================  
+
+
+Page 3 {data-navmenu="Menu B" data-navmenu="fa-cog"}
+=====================================
+
+
+Page 4 {data-navmenu="Menu B"}
+=====================================  
+
+Page 1
+===================================== 
+
+You can link to a dashboard page with either of the following syntaxes:
+
+[Page 2]
+
+[Page Two](#page-2)
+
+The second syntax is used when you want a custom name for the link 
+(rather than just using the page title).
+
+### Chart A
+    
+```{r}
+```
+
+Page 2
+=====================================     
+
+### Chart B
+    
+```{r}
+```
+
+
