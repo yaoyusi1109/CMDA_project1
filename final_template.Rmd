@@ -1,11 +1,18 @@
 ---
-title: "Final Template"
-author: "Yusi Yao, Xavier, Keshavd"
+title: "Air Quality Dashboard - EPA Annual Concentrations 2024"
+author: "Yusi Yao, Xavier Akers, Keshavd"
 output:
   flexdashboard::flex_dashboard:
     orientation: columns
     vertical_layout: fill
     self_contained: true
+    theme:
+      version: 5
+      bootswatch: flatly
+      base_font:
+        google: Prompt
+      code_font:
+        google: JetBrains Mono
 ---
 
 ```{r setup, include=FALSE}
@@ -17,8 +24,74 @@ library(flexdashboard)
 
 ```{r, echo=FALSE, message=FALSE}
 library(readr)
+library(ggplot2)
+library(leaflet)
+library(dplyr)
+library(kableExtra)
+library(DT)
 data <- read_csv("data/annual_conc_by_monitor_2024.csv")
+
 ```
+
+# Introduction & Abstract
+
+
+Column {data-width=350}
+-----------------------------------------------------------------------
+
+### Abstract
+
+This dashboard analyzes the EPA Annual Concentration dataset for 2024, summarizing pollutant measurements across U.S. monitoring sites. We explore geographic patterns, pollutant trends, and apply statistical models to understand air quality outcomes and predictors.
+
+### Data Dictionary
+
+```{r}
+variables <- colnames(data)
+
+descriptions <- c(
+  "State FIPS code", "County FIPS code", "Monitoring site number", "Parameter code for pollutant",
+  "Point of contact", "Latitude coordinate", "Longitude coordinate", "Geodetic datum",
+  "Pollutant name", "Sample duration", "Pollutant standard reference", "Metric used for analysis",
+  "Measurement method", "Year of data", "Units of measure", "Event type recorded",
+  "Number of valid observations", "Percent of valid observations", "Data completeness flag",
+  "Number of valid days", "Number of required days", "Exceptional data count",
+  "Null data count", "Primary standard exceedances", "Secondary standard exceedances",
+  "Certification status", "Number of observations below detection limit",
+  "Arithmetic mean concentration", "Arithmetic standard deviation", "Maximum observed value",
+  "Datetime of max value", "Second max value", "Datetime of second max", "Third max value",
+  "Datetime of third max", "Fourth max value", "Datetime of fourth max", 
+  "First non-overlapping max", "Datetime of first non-overlapping max", 
+  "Second non-overlapping max", "Datetime of second non-overlapping max", 
+  "99th percentile", "98th percentile", "95th percentile", "90th percentile", 
+  "75th percentile", "50th percentile", "10th percentile", "Local site name",
+  "Monitoring site address", "State name", "County name", "City name",
+  "Core-Based Statistical Area name", "Date of last data change"
+)
+
+data_dictionary <- data.frame(
+  Variable = variables,
+  Description = descriptions[1:length(variables)]
+)
+
+kbl(data_dictionary) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+Column {data-width=650}
+-----------------------------------------------------------------------
+
+### Map of Monitoring Stations
+
+```{r}
+leaflet(data) %>%
+  addTiles() %>%
+  addCircleMarkers(
+    lng = ~Longitude, lat = ~Latitude,
+    radius = 1,
+    popup = ~paste("Pollutant:", `Parameter Name`, "<br>Mean:", `Arithmetic Mean`)
+  )
+```
+
 
 # Multiple Regression
 
