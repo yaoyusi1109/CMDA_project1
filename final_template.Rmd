@@ -1,5 +1,5 @@
 ---
-title: "Air Quality Dashboard - EPA Annual Concentrations 2024"
+title: "U.S. Environment Insight"
 author: "Yusi Yao, Xavier Akers, Keshavd"
 output:
   flexdashboard::flex_dashboard:
@@ -208,29 +208,150 @@ leaflet(pm25_data) %>%
 
 
 
+Ridge Regression {#ridge-regression data-navmenu="MLR" data-icon="fa-line-chart"}
+===================================== 
+
+```{r ridge_setup, include=FALSE}
+# Ensure glmnet is installed
+if (!requireNamespace("glmnet", quietly = TRUE)) {
+  install.packages("glmnet")
+}
+library(glmnet)
+library(plotly)
+library(reshape2) # For melt function in correlation heatmap
+```
+
+Column {data-width=650}
+-------------------------------------
+
+### Ridge Regression
+
+**Research Question**: Can Ridge Regression improve the prediction of PM2.5 concentrations by accounting for multicollinearity among a diverse set of air quality and monitoring metrics over time?
+
+**Modeling Approach**:  
+- **Response Variable**: Arithmetic Mean  
+- **Predictor Variables**: 1st Max Value, 2nd Max Value, 3rd Max Value, 4th Max Value, 90th Percentile, 75th Percentile, 50th Percentile, 10th Percentile, Observation Count, Observation Percent, Year  
+
+**Justification**: The selected predictors include highly correlated air quality metrics and monitoring indicators, which may introduce multicollinearity. Ridge Regression’s L2 regularization can stabilize the model, and incorporating Year allows exploration of temporal trends.
+
+### Ridge Regression Results
+
+```{r ridge_model}
+# Filter to only PM2.5 observations and select relevant predictors
+ridge_data <- data %>%
+  filter(`Parameter Name` == "PM2.5 - Local Conditions") %>%
+  select(`Arithmetic Mean`, `1st Max Value`, `2nd Max Value`, `3rd Max Value`, 
+         `4th Max Value`, `90th Percentile`, `75th Percentile`, 
+         `50th Percentile`, `10th Percentile`, `Observation Count`, 
+         `Observation Percent`, Year) %>%
+  na.omit()
+
+# Prepare the predictor matrix and response variable
+X <- model.matrix(`Arithmetic Mean` ~ . - 1, data = ridge_data) # Exclude intercept
+y <- ridge_data$`Arithmetic Mean`
+
+# Perform cross-validation to select the optimal lambda
+set.seed(123) # For reproducibility
+cv_model <- cv.glmnet(X, y, alpha = 0) # alpha = 0 for Ridge
+
+# Fit the final Ridge model with the optimal lambda
+ridge_model <- glmnet(X, y, alpha = 0, lambda = cv_model$lambda.min)
+
+# Extract coefficients
+ridge_coefs <- coef(ridge_model) %>%
+  as.matrix() %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column(var = "Predictor") %>%
+  rename(Coefficient = s0) %>%
+  mutate(Coefficient = round(Coefficient, 4))
+
+# Display the coefficients in a table
+kbl(ridge_coefs, caption = "Ridge Regression Coefficients (lambda = min)") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+Column {data-width=350}
+-------------------------------------
+
+### Actual vs Predicted PM2.5 (Ridge)
+
+```{r ridge_actual_vs_predicted, fig.width=8, fig.height=8}
+# Predict using the Ridge model
+ridge_data$predicted <- predict(ridge_model, newx = X)
+
+# Plot: Actual vs Predicted
+ggplot(ridge_data, aes(x = `Arithmetic Mean`, y = predicted)) +
+  geom_point(alpha = 0.3, color = "steelblue") +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "Actual vs Predicted PM2.5 (Ridge)", x = "Actual", y = "Predicted") +
+  theme_minimal()
+```
+
+### 3D Visualization of PM2.5 Trends
+
+```{r ridge_3d_plot, fig.width=10, fig.height=10}
+library(plotly)
+library(viridis)
+
+plot_3d <- plot_ly(
+  data = ridge_data, 
+  x = ~Year, 
+  y = ~`1st Max Value`, 
+  z = ~`Arithmetic Mean`,
+  color = ~`Observation Percent`, 
+  colors = viridis(256),
+  type = "scatter3d", 
+  mode = "markers",
+  opacity = 0.6,
+  marker = list(size = 3)
+) %>%
+  layout(
+    title = list(text = "3D PM2.5 Trends by Year and Max Value"),
+    scene = list(
+      xaxis = list(title = "Year"),
+      yaxis = list(title = "1st Max Value"),
+      zaxis = list(title = "Arithmetic Mean")
+    )
+  )
+
+plot_3d
+```
+
+### Predictor Correlation Heatmap
+
+```{r ridge_correlation_heatmap, fig.width=10, fig.height=8}
+# Calculate correlation matrix for predictors
+cor_matrix <- cor(ridge_data[, c("1st Max Value", "2nd Max Value", "3rd Max Value", 
+                                 "4th Max Value", "90th Percentile", "75th Percentile", 
+                                 "50th Percentile", "10th Percentile", "Observation Count", 
+                                 "Observation Percent", "Year")])
+
+# Create a heatmap with a cool color scheme
+ggplot(data = melt(cor_matrix), aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0,
+                       name = "Correlation") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(hjust = 0.5)) +
+  labs(title = "Correlation Heatmap of Predictors", x = "", y = "")
+```
 
 
 
 
-# Ridge Regression
 
-## Column {data-width="650"}
 
-2.  Ridge Regression (using glmnet)
 
-Research Question: Does incorporating multiple correlated predictors
-improve the prediction of PM2.5 concentrations?
 
-Modeling Approach: - Response Variable: Arithmetic Mean - Predictor
-Variables: 1st Max Value, 2nd Max Value, 3rd Max Value, 4th Max Value,
-90th Percentile, 75th Percentile, 50th Percentile, 10th Percentile,
-Observation Count
 
-Justification: Ridge regression is suitable for handling
-multicollinearity among predictors, potentially enhancing model
-performance.
 
-------------------------------------------------------------------------
+
+
+
+
+
+
 
 # Natural Spline or LOESS
 
