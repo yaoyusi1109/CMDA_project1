@@ -20,36 +20,35 @@ editor_options:
 
 ```{r setup, include=FALSE}
 library(flexdashboard)
-# Install thematic and un-comment for themed static plots (i.e., ggplot2)
-# thematic::thematic_rmd()
-
-```
-
-```{r, echo=FALSE, message=FALSE}
 library(readr)
 library(ggplot2)
 library(leaflet)
 library(dplyr)
 library(kableExtra)
 library(DT)
-data <- read_csv("data/annual_conc_by_monitor_2024.csv")
-
+library(broom)
+library(viridis)
+# Install thematic and un-comment for themed static plots (i.e., ggplot2)
+# thematic::thematic_rmd()
 ```
 
-# Introduction & Abstract
+```{r data_load, echo=FALSE, message=FALSE}
+data <- read_csv("data/annual_conc_by_monitor_2024.csv")
+```
 
-## Column {data-width="350"}
+Introduction & Abstract
+===================================== 
+
+Column {data-width=350}
+-------------------------------------
 
 ### Abstract
 
-This dashboard analyzes the EPA Annual Concentration dataset for 2024,
-summarizing pollutant measurements across U.S. monitoring sites. We
-explore geographic patterns, pollutant trends, and apply statistical
-models to understand air quality outcomes and predictors.
+This dashboard analyzes the EPA Annual Concentration dataset for 2024, summarizing pollutant measurements across U.S. monitoring sites. We explore geographic patterns, pollutant trends, and apply statistical models to understand air quality outcomes and predictors.
 
 ### Data Dictionary
 
-```{r}
+```{r data_dictionary}
 variables <- colnames(data)
 
 descriptions <- c(
@@ -81,11 +80,12 @@ kbl(data_dictionary) %>%
   kable_styling(bootstrap_options = c("striped", "hover"))
 ```
 
-## Column {data-width="650"}
+Column {data-width=650}
+-------------------------------------
 
 ### Map of Monitoring Stations
 
-```{r}
+```{r monitoring_map}
 leaflet(data) %>%
   addTiles() %>%
   addCircleMarkers(
@@ -95,25 +95,122 @@ leaflet(data) %>%
   )
 ```
 
-# Multiple Regression
+Multiple Regression {data-navmenu="MLR" data-icon="fa-chart-line"}
+===================================== 
 
-## Column {data-width="650"}
+Column {data-width=650}
+-------------------------------------
 
-### Description
+### Multiple Linear Regression
 
-1.  Multiple Linear Regression
+**Research Question**: Can we predict the annual average concentration (Arithmetic Mean) of PM2.5 based on location and temporal variables?
 
-Research Question: Can we predict the annual average concentration
-(Arithmetic Mean) of PM2.5 based on location and temporal variables?
+**Modeling Approach**:  
+- **Response Variable**: Arithmetic Mean  
+- **Predictor Variables**: Latitude, Longitude, Year, Observation Count, 1st Max Value, 90th Percentile, 10th Percentile  
 
-Modeling Approach: • Response Variable: Arithmetic Mean • Predictor
-Variables: Latitude, Longitude, Year, Observation Count, 1st Max Value,
-90th Percentile, 10th Percentile
+**Justification**: This model aims to understand how geographical and temporal factors influence PM2.5 concentrations.
 
-Justification: This model aims to understand how geographical and
-temporal factors influence PM2.5 concentrations.
+### Regression Results
 
-------------------------------------------------------------------------
+```{r regression_results}
+# Filter to only PM2.5 observations
+pm25_data <- data %>%
+  filter(`Parameter Name` == "PM2.5 - Local Conditions") %>%
+  select(`Arithmetic Mean`, Latitude, Longitude, Year, 
+         `Observation Count`, `1st Max Value`, 
+         `90th Percentile`, `10th Percentile`) %>%
+  na.omit()
+
+# Fit multiple linear regression model
+lm_model <- lm(`Arithmetic Mean` ~ Latitude + Longitude + Year +
+                 `Observation Count` + `1st Max Value` +
+                 `90th Percentile` + `10th Percentile`,
+               data = pm25_data)
+
+# Create a tidy summary of the regression model
+regression_summary <- tidy(lm_model) %>%
+  mutate(p.value = round(p.value, 4),
+         estimate = round(estimate, 4),
+         std.error = round(std.error, 4),
+         statistic = round(statistic, 4))
+
+# Display the results in a table
+kbl(regression_summary, caption = "Multiple Linear Regression Coefficients") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+Column {data-width=350}
+-------------------------------------
+
+### Actual vs Predicted PM2.5
+
+```{r actual_vs_predicted, fig.width=8, fig.height=8}
+# Add fitted values and residuals
+pm25_data$predicted <- predict(lm_model)
+pm25_data$residuals <- resid(lm_model)
+
+# Plot: Actual vs Predicted
+ggplot(pm25_data, aes(x = `Arithmetic Mean`, y = predicted)) +
+  geom_point(alpha = 0.3, color = "steelblue") +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "Actual vs Predicted PM2.5", x = "Actual", y = "Predicted") +
+  theme_minimal()
+```
+
+### Residuals vs Fitted
+
+```{r residuals, fig.width=8, fig.height=8}
+# Residuals vs Fitted Plot
+ggplot(pm25_data, aes(x = predicted, y = residuals)) +
+  geom_point(alpha = 0.3, color = "darkorange") +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  labs(title = "Residuals vs Fitted", x = "Predicted", y = "Residuals") +
+  theme_minimal()
+```
+
+Spatial Analysis {#spatial-analysis data-navmenu="MLR" data-icon="fa-map"}
+===================================== 
+
+Column {data-width=1000}
+-------------------------------------
+
+### Spatial Prediction of PM2.5 Concentrations
+
+```{r spatial, fig.width=14, fig.height=12}
+# Create color palette
+pal <- colorNumeric(
+  palette = "plasma",
+  domain = pm25_data$predicted
+)
+
+# Create leaflet map
+leaflet(pm25_data) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addCircleMarkers(
+    lng = ~Longitude,
+    lat = ~Latitude,
+    radius = 3,
+    color = ~pal(predicted),
+    stroke = FALSE,
+    fillOpacity = 0.8,
+    label = ~paste0("Predicted PM2.5: ", round(predicted, 2), " µg/m³")
+  ) %>%
+  addLegend(
+    "bottomright",
+    pal = pal,
+    values = ~predicted,
+    title = "Predicted PM2.5 (µg/m³)",
+    opacity = 1
+  )
+```
+
+
+
+
+
+
+
 
 # Ridge Regression
 
@@ -298,34 +395,3 @@ Exceedance Count \> 0, else 0) - Predictor Variables: Arithmetic Mean,
 
 Justification: Logistic regression models the probability of a binary
 outcome based on predictor variables.
-
-# Page 1 {data-navmenu="Menu A" data-navmenu-icon="fa-bookmark"}
-
-# Page 2 {#page-2 data-navmenu="Menu A"}
-
-# Page 3 {data-navmenu="Menu B" data-navmenu="fa-cog"}
-
-# Page 4 {data-navmenu="Menu B"}
-
-# Page 1
-
-You can link to a dashboard page with either of the following syntaxes:
-
-[Page 2](#page-2)
-
-[Page Two](#page-2)
-
-The second syntax is used when you want a custom name for the link
-(rather than just using the page title).
-
-### Chart A
-
-```{r}
-```
-
-# Page 2
-
-### Chart B
-
-```{r}
-```
