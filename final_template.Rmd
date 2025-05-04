@@ -13,6 +13,7 @@ output:
         google: Prompt
       code_font:
         google: JetBrains Mono
+    css: custom.css
 editor_options: 
   markdown: 
     wrap: 72
@@ -390,8 +391,8 @@ observed features.
 
 ------------------------------------------------------------------------
 
-# Naive Bayes
-
+Naive Bayes
+===================================== 
 
 ## Overview
 
@@ -470,7 +471,7 @@ if (nrow(error_counts) > 0) {
 }
 ```
 
-Column {data-width=450}
+Column {data-width=350}
 -----------------------------------------------------------------------
 
 ```{r, height=300}
@@ -501,18 +502,96 @@ The Naive Bayes classifier achieved an overall accuracy of **`r round(accuracy *
 
 ------------------------------------------------------------------------
 
-# Logistic Regression
+Logistic Regression
+===================================== 
 
-## Column {data-width="650"}
+## Overview
 
-6.  Logistic Regression Classification
+- **Research Question:** What factors influence the likelihood of exceeding primary pollutant standards?
+- **Modeling Approach:** 
+  - **Response Variable:** Exceedance (binary: 1 if `Primary Exceedance Count` \> 0, else 0) 
+  - **Predictor Variables:** Arithmetic Mean, 1st Max Value, Observation Count, Parameter Name (encoded)
+- **Justification:** Logistic regression models the probability of a binary outcome based on predictor variables.
 
-Research Question: What factors influence the likelihood of exceeding
-primary pollutant standards?
+---
 
-Modeling Approach: - Response Variable: Exceedance (binary: 1 if Primary
-Exceedance Count \> 0, else 0) - Predictor Variables: Arithmetic Mean,
-1st Max Value, Observation Count, Parameter Name (encoded)
+```{r}
+logit_data = data %>%
+  mutate(Exceedance = ifelse(`Primary Exceedance Count` > 0, 1, 0)) %>%
+  select(Exceedance, `Arithmetic Mean`, `1st Max Value`, `Observation Count`, `Parameter Name`) %>%
+  na.omit()
 
-Justification: Logistic regression models the probability of a binary
-outcome based on predictor variables.
+logit_data$Exceedance = as.factor(logit_data$Exceedance)
+logit_data$`Parameter Name` = as.factor(logit_data$`Parameter Name`)
+
+# test train split
+set.seed(1)
+split_idx = sample(1:nrow(logit_data), size = 0.7 * nrow(logit_data))
+train_data = logit_data[split_idx, ]
+test_data = logit_data[-split_idx, ]
+
+# logistic regression
+logit_model = glm(Exceedance ~ `Arithmetic Mean` + `1st Max Value` + `Observation Count` + `Parameter Name`,
+                   data = train_data, family = binomial)
+logit_probs <- predict(logit_model, newdata = test_data, type = "response")
+logit_pred <- ifelse(logit_probs > 0.5, 1, 0)
+actual <- as.numeric(as.character(test_data$Exceedance))
+
+# accuracy
+accuracy = mean(logit_pred == actual)
+summary_table = data.frame(
+  Metric = c("Total Test Samples", "Overall Accuracy"),
+  Value = c(length(actual), paste0(round(accuracy * 100, 2), "%"))
+)
+
+kbl(summary_table, caption = "Logistic Regression Model Performance") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+```
+
+### Coefficient Summary
+
+```{r}
+tidy_summary <- broom::tidy(logit_model)
+
+kbl(tidy_summary, caption = "Logistic Regression Coefficients") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+### Discussion
+
+The logistic regression model achieved an overall accuracy of **`r round(accuracy * 100, 2)`%**.
+
+---
+
+## Visuals {data-width="350"}
+
+### Logistic Regression Coefficients
+
+```{r}
+library(broom)
+
+coef_df = tidy(logit_model, conf.int = TRUE)
+
+ggplot(coef_df, aes(x = estimate, y = reorder(term, estimate))) +
+  geom_point() +
+  geom_errorbarh(aes(xmin = conf.low, xmax = conf.high), height = 0.2) +
+  labs(x = "Estimate", y = "Predictor") +
+  theme_minimal()
+
+```
+
+### Probalities vs Arithmetic Mean
+
+```{r, message=FALSE, warning=FALSE}
+plot_df = test_data
+plot_df$Predicted_Prob = logit_probs
+
+ggplot(plot_df, aes(x = `Arithmetic Mean`, y = Predicted_Prob)) +
+  geom_point(aes(color = as.factor(Exceedance)), alpha = 0.4) +
+  geom_smooth(method = "loess", se = FALSE, color = "blue") +
+  labs(x = "Arithmetic Mean Concentration",
+       y = "Predicted Probability of Exceedance",
+       color = "Actual Exceedance") +
+  theme_minimal()
+```
