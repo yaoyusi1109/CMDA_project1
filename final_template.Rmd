@@ -524,18 +524,19 @@ logit_data = data %>%
 logit_data$Exceedance = as.factor(logit_data$Exceedance)
 logit_data$`Parameter Name` = as.factor(logit_data$`Parameter Name`)
 
+
 # test train split
 set.seed(1)
-split_idx = sample(1:nrow(logit_data), size = 0.7 * nrow(logit_data))
+split_idx = sample(1:nrow(logit_data), size = 0.8 * nrow(logit_data))
 train_data = logit_data[split_idx, ]
 test_data = logit_data[-split_idx, ]
 
 # logistic regression
 logit_model = glm(Exceedance ~ `Arithmetic Mean` + `1st Max Value` + `Observation Count` + `Parameter Name`,
                    data = train_data, family = binomial)
-logit_probs <- predict(logit_model, newdata = test_data, type = "response")
-logit_pred <- ifelse(logit_probs > 0.5, 1, 0)
-actual <- as.numeric(as.character(test_data$Exceedance))
+logit_probs = predict(logit_model, newdata = test_data, type = "response")
+logit_pred = ifelse(logit_probs > 0.5, 1, 0)
+actual = as.numeric(as.character(test_data$Exceedance))
 
 # accuracy
 accuracy = mean(logit_pred == actual)
@@ -552,7 +553,7 @@ kbl(summary_table, caption = "Logistic Regression Model Performance") %>%
 ### Coefficient Summary
 
 ```{r}
-tidy_summary <- broom::tidy(logit_model)
+tidy_summary = broom::tidy(logit_model)
 
 kbl(tidy_summary, caption = "Logistic Regression Coefficients") %>%
   kable_styling(bootstrap_options = c("striped", "hover"))
@@ -566,19 +567,23 @@ The logistic regression model achieved an overall accuracy of **`r round(accurac
 
 ## Visuals {data-width="350"}
 
-### Logistic Regression Coefficients
+### Coefficients
 
 ```{r}
 library(broom)
 
-coef_df = tidy(logit_model, conf.int = TRUE)
+tidy_summary = tidy_summary %>%
+  mutate(
+    conf.low = estimate - 1.96 * std.error,
+    conf.high = estimate + 1.96 * std.error
+  )
 
-ggplot(coef_df, aes(x = estimate, y = reorder(term, estimate))) +
-  geom_point() +
-  geom_errorbarh(aes(xmin = conf.low, xmax = conf.high), height = 0.2) +
-  labs(x = "Estimate", y = "Predictor") +
+ggplot(tidy_summary, aes(x = estimate, y = reorder(term, estimate))) +
+  geom_point(size = 2, color = "#2E75B6") +
+  geom_errorbarh(aes(xmin = conf.low, xmax = conf.high), height = 0.2, color = "#2E75B6") +
+  labs(x = "Estimate (log-odds)", y = "Predictor") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray") +
   theme_minimal()
-
 ```
 
 ### Probalities vs Arithmetic Mean
