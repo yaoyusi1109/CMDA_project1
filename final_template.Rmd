@@ -13,11 +13,23 @@ output:
         google: Prompt
       code_font:
         google: JetBrains Mono
-    css: custom.css
 editor_options: 
   markdown: 
     wrap: 72
 ---
+
+<style>
+
+.navbar {
+    margin-bottom: 5px;  /* default is around 20px */
+}
+
+.section {
+    margin-top: 5px;  /* tighten vertical spacing */
+}
+
+</style>
+
 
 ```{r setup, include=FALSE}
 library(flexdashboard)
