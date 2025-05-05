@@ -1,0 +1,799 @@
+---
+title: "U.S. Environment Insight"
+author: "Yusi Yao, Xavier Akers, Keshav Dwivedi"
+output:
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+    self_contained: true
+    theme:
+      version: 5
+      bootswatch: flatly
+      base_font:
+        google: Prompt
+      code_font:
+        google: JetBrains Mono
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+<style>
+
+.navbar {
+    margin-bottom: 5px;  /* default is around 20px */
+}
+
+.section {
+    margin-top: 5px;  /* tighten vertical spacing */
+}
+
+</style>
+
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(readr)
+library(ggplot2)
+library(leaflet)
+library(dplyr)
+library(kableExtra)
+library(DT)
+library(broom)
+library(viridis)
+# Install thematic and un-comment for themed static plots (i.e., ggplot2)
+# thematic::thematic_rmd()
+```
+
+```{r data_load, echo=FALSE, message=FALSE}
+data <- read_csv("~/Downloads/annual_conc_by_monitor_2024.csv")
+```
+
+Introduction & Abstract
+===================================== 
+
+Column {data-width=350}
+-------------------------------------
+
+### Abstract
+
+This dashboard analyzes the EPA Annual Concentration dataset for 2024, summarizing pollutant measurements across U.S. monitoring sites. We explore geographic patterns, pollutant trends, and apply statistical models to understand air quality outcomes and predictors.
+
+### Data Dictionary
+
+```{r data_dictionary}
+variables <- colnames(data)
+
+descriptions <- c(
+  "State FIPS code", "County FIPS code", "Monitoring site number", "Parameter code for pollutant",
+  "Point of contact", "Latitude coordinate", "Longitude coordinate", "Geodetic datum",
+  "Pollutant name", "Sample duration", "Pollutant standard reference", "Metric used for analysis",
+  "Measurement method", "Year of data", "Units of measure", "Event type recorded",
+  "Number of valid observations", "Percent of valid observations", "Data completeness flag",
+  "Number of valid days", "Number of required days", "Exceptional data count",
+  "Null data count", "Primary standard exceedances", "Secondary standard exceedances",
+  "Certification status", "Number of observations below detection limit",
+  "Arithmetic mean concentration", "Arithmetic standard deviation", "Maximum observed value",
+  "Datetime of max value", "Second max value", "Datetime of second max", "Third max value",
+  "Datetime of third max", "Fourth max value", "Datetime of fourth max", 
+  "First non-overlapping max", "Datetime of first non-overlapping max", 
+  "Second non-overlapping max", "Datetime of second non-overlapping max", 
+  "99th percentile", "98th percentile", "95th percentile", "90th percentile", 
+  "75th percentile", "50th percentile", "10th percentile", "Local site name",
+  "Monitoring site address", "State name", "County name", "City name",
+  "Core-Based Statistical Area name", "Date of last data change"
+)
+
+data_dictionary <- data.frame(
+  Variable = variables,
+  Description = descriptions[1:length(variables)]
+)
+
+kbl(data_dictionary) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+Column {data-width=650}
+-------------------------------------
+
+### Map of Monitoring Stations
+
+```{r monitoring_map}
+leaflet(data) %>%
+  addTiles() %>%
+  addCircleMarkers(
+    lng = ~Longitude, lat = ~Latitude,
+    radius = 1,
+    popup = ~paste("Pollutant:", `Parameter Name`, "<br>Mean:", `Arithmetic Mean`)
+  )
+```
+
+Multiple Regression {data-navmenu="MLR" data-icon="fa-chart-line"}
+===================================== 
+
+Column {data-width=650}
+-------------------------------------
+
+### Multiple Linear Regression
+
+**Research Question**: Can we predict the annual average concentration (Arithmetic Mean) of PM2.5 based on location and temporal variables?
+
+**Modeling Approach**:  
+- **Response Variable**: Arithmetic Mean  
+- **Predictor Variables**: Latitude, Longitude, Year, Observation Count, 1st Max Value, 90th Percentile, 10th Percentile  
+
+**Justification**: This model aims to understand how geographical and temporal factors influence PM2.5 concentrations.
+
+### Regression Results
+
+```{r regression_results}
+# Filter to only PM2.5 observations
+pm25_data <- data %>%
+  filter(`Parameter Name` == "PM2.5 - Local Conditions") %>%
+  select(`Arithmetic Mean`, Latitude, Longitude, Year, 
+         `Observation Count`, `1st Max Value`, 
+         `90th Percentile`, `10th Percentile`) %>%
+  na.omit()
+
+# Fit multiple linear regression model
+lm_model <- lm(`Arithmetic Mean` ~ Latitude + Longitude + Year +
+                 `Observation Count` + `1st Max Value` +
+                 `90th Percentile` + `10th Percentile`,
+               data = pm25_data)
+
+# Create a tidy summary of the regression model
+regression_summary <- tidy(lm_model) %>%
+  mutate(p.value = round(p.value, 4),
+         estimate = round(estimate, 4),
+         std.error = round(std.error, 4),
+         statistic = round(statistic, 4))
+
+# Display the results in a table
+kbl(regression_summary, caption = "Multiple Linear Regression Coefficients") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+Column {data-width=350}
+-------------------------------------
+
+### Actual vs Predicted PM2.5
+
+```{r actual_vs_predicted, fig.width=8, fig.height=8}
+# Add fitted values and residuals
+pm25_data$predicted <- predict(lm_model)
+pm25_data$residuals <- resid(lm_model)
+
+# Plot: Actual vs Predicted
+ggplot(pm25_data, aes(x = `Arithmetic Mean`, y = predicted)) +
+  geom_point(alpha = 0.3, color = "steelblue") +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "Actual vs Predicted PM2.5", x = "Actual", y = "Predicted") +
+  theme_minimal()
+```
+
+### Residuals vs Fitted
+
+```{r residuals, fig.width=8, fig.height=8}
+# Residuals vs Fitted Plot
+ggplot(pm25_data, aes(x = predicted, y = residuals)) +
+  geom_point(alpha = 0.3, color = "darkorange") +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  labs(title = "Residuals vs Fitted", x = "Predicted", y = "Residuals") +
+  theme_minimal()
+```
+
+Spatial Analysis {#spatial-analysis data-navmenu="MLR" data-icon="fa-map"}
+===================================== 
+
+Column {data-width=1000}
+-------------------------------------
+
+### Spatial Prediction of PM2.5 Concentrations
+
+```{r spatial, fig.width=14, fig.height=12}
+# Create color palette
+pal <- colorNumeric(
+  palette = "plasma",
+  domain = pm25_data$predicted
+)
+
+# Create leaflet map
+leaflet(pm25_data) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  addCircleMarkers(
+    lng = ~Longitude,
+    lat = ~Latitude,
+    radius = 3,
+    color = ~pal(predicted),
+    stroke = FALSE,
+    fillOpacity = 0.8,
+    label = ~paste0("Predicted PM2.5: ", round(predicted, 2), " µg/m³")
+  ) %>%
+  addLegend(
+    "bottomright",
+    pal = pal,
+    values = ~predicted,
+    title = "Predicted PM2.5 (µg/m³)",
+    opacity = 1
+  )
+```
+
+
+
+
+Ridge Regression {#ridge-regression data-navmenu="MLR" data-icon="fa-line-chart"}
+===================================== 
+
+```{r ridge_setup, include=FALSE}
+# Ensure glmnet is installed
+if (!requireNamespace("glmnet", quietly = TRUE)) {
+  install.packages("glmnet")
+}
+library(glmnet)
+library(plotly)
+library(reshape2) # For melt function in correlation heatmap
+```
+
+Column {data-width=650}
+-------------------------------------
+
+### Ridge Regression
+
+**Research Question**: Can Ridge Regression improve the prediction of PM2.5 concentrations by accounting for multicollinearity among a diverse set of air quality and monitoring metrics over time?
+
+**Modeling Approach**:  
+- **Response Variable**: Arithmetic Mean  
+- **Predictor Variables**: 1st Max Value, 2nd Max Value, 3rd Max Value, 4th Max Value, 90th Percentile, 75th Percentile, 50th Percentile, 10th Percentile, Observation Count, Observation Percent, Year  
+
+**Justification**: The selected predictors include highly correlated air quality metrics and monitoring indicators, which may introduce multicollinearity. Ridge Regression’s L2 regularization can stabilize the model, and incorporating Year allows exploration of temporal trends.
+
+### Ridge Regression Results
+
+```{r ridge_model}
+# Filter to only PM2.5 observations and select relevant predictors
+ridge_data <- data %>%
+  filter(`Parameter Name` == "PM2.5 - Local Conditions") %>%
+  select(`Arithmetic Mean`, `1st Max Value`, `2nd Max Value`, `3rd Max Value`, 
+         `4th Max Value`, `90th Percentile`, `75th Percentile`, 
+         `50th Percentile`, `10th Percentile`, `Observation Count`, 
+         `Observation Percent`, Year) %>%
+  na.omit()
+
+# Prepare the predictor matrix and response variable
+X <- model.matrix(`Arithmetic Mean` ~ . - 1, data = ridge_data) # Exclude intercept
+y <- ridge_data$`Arithmetic Mean`
+
+# Perform cross-validation to select the optimal lambda
+set.seed(123) # For reproducibility
+cv_model <- cv.glmnet(X, y, alpha = 0) # alpha = 0 for Ridge
+
+# Fit the final Ridge model with the optimal lambda
+ridge_model <- glmnet(X, y, alpha = 0, lambda = cv_model$lambda.min)
+
+# Extract coefficients
+ridge_coefs <- coef(ridge_model) %>%
+  as.matrix() %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column(var = "Predictor") %>%
+  rename(Coefficient = s0) %>%
+  mutate(Coefficient = round(Coefficient, 4))
+
+# Display the coefficients in a table
+kbl(ridge_coefs, caption = "Ridge Regression Coefficients (lambda = min)") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+Column {data-width=350}
+-------------------------------------
+
+### Actual vs Predicted PM2.5 (Ridge)
+
+```{r ridge_actual_vs_predicted, fig.width=8, fig.height=8}
+# Predict using the Ridge model
+ridge_data$predicted <- predict(ridge_model, newx = X)
+
+# Plot: Actual vs Predicted
+ggplot(ridge_data, aes(x = `Arithmetic Mean`, y = predicted)) +
+  geom_point(alpha = 0.3, color = "steelblue") +
+  geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "Actual vs Predicted PM2.5 (Ridge)", x = "Actual", y = "Predicted") +
+  theme_minimal()
+```
+
+### 3D Visualization of PM2.5 Trends
+
+```{r ridge_3d_plot, fig.width=10, fig.height=10}
+library(plotly)
+library(viridis)
+
+plot_3d <- plot_ly(
+  data = ridge_data, 
+  x = ~Year, 
+  y = ~`1st Max Value`, 
+  z = ~`Arithmetic Mean`,
+  color = ~`Observation Percent`, 
+  colors = viridis(256),
+  type = "scatter3d", 
+  mode = "markers",
+  opacity = 0.6,
+  marker = list(size = 3)
+) %>%
+  layout(
+    title = list(text = "3D PM2.5 Trends by Year and Max Value"),
+    scene = list(
+      xaxis = list(title = "Year"),
+      yaxis = list(title = "1st Max Value"),
+      zaxis = list(title = "Arithmetic Mean")
+    )
+  )
+
+plot_3d
+```
+
+### Predictor Correlation Heatmap
+
+```{r ridge_correlation_heatmap, fig.width=10, fig.height=8}
+# Calculate correlation matrix for predictors
+cor_matrix <- cor(ridge_data[, c("1st Max Value", "2nd Max Value", "3rd Max Value", 
+                                 "4th Max Value", "90th Percentile", "75th Percentile", 
+                                 "50th Percentile", "10th Percentile", "Observation Count", 
+                                 "Observation Percent", "Year")])
+
+# Create a heatmap with a cool color scheme
+ggplot(data = melt(cor_matrix), aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0,
+                       name = "Correlation") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        plot.title = element_text(hjust = 0.5)) +
+  labs(title = "Correlation Heatmap of Predictors", x = "", y = "")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Natural Spline or LOESS
+
+## Column {data-width="650"}
+
+3.  Natural Cubic Spline or LOESS Fit
+
+Research Question: How do PM2.5 concentrations vary over time within a
+specific location?
+
+Modeling Approach: - Response Variable: Arithmetic Mean - Predictor
+Variable: Date (converted from 1st Max DateTime) - Method: Apply a
+natural cubic spline or LOESS smoothing to model temporal trends.
+
+Justification: This approach captures non-linear temporal patterns in
+pollutant concentrations.
+## Column {data-width=50}
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(splines)
+library(kableExtra)
+
+spline_data <- data %>%
+  dplyr::filter(`Parameter Name` == "PM2.5 - Local Conditions") %>%
+  dplyr::select(`Arithmetic Mean`, `1st Max DateTime`, `City Name`) %>%
+  dplyr::filter(!is.na(`1st Max DateTime`)) %>%
+  mutate(Date = as.Date(`1st Max DateTime`)) %>%
+  dplyr::filter(!is.na(Date))
+
+city_filter <- "Los Angeles"  # You can replace this
+city_data <- spline_data %>%
+  dplyr::filter(`City Name` == city_filter)
+
+summary_stats <- data.frame(
+  Metric = c("Mean", "Standard Deviation", "Minimum", "Maximum", "Number of Observations", "Date Range"),
+  Value = c(
+    round(mean(city_data$`Arithmetic Mean`, na.rm = TRUE), 2),
+    round(sd(city_data$`Arithmetic Mean`, na.rm = TRUE), 2),
+    round(min(city_data$`Arithmetic Mean`, na.rm = TRUE), 2),
+    round(max(city_data$`Arithmetic Mean`, na.rm = TRUE), 2),
+    nrow(city_data),
+    paste(min(city_data$Date), "to", max(city_data$Date))
+  )
+)
+
+kbl(summary_stats, caption = paste("Summary of PM2.5 in", city_filter)) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+city_data <- city_data %>%
+  mutate(day_num = as.numeric(Date))
+
+spline_fit <- lm(`Arithmetic Mean` ~ ns(day_num, df = 4), data = city_data)
+city_data$Spline_Fit <- predict(spline_fit)
+
+p <- ggplot(city_data, aes(x = Date)) +
+  geom_point(aes(y = `Arithmetic Mean`), alpha = 0.3, color = "#3498DB") +
+  geom_line(aes(y = Spline_Fit), color = "#E74C3C", size = 1) +
+  labs(
+    title = paste("Natural Cubic Spline of PM2.5 in", city_filter),
+    x = "Date",
+    y = "PM2.5 Arithmetic Mean (µg/m³)"
+  ) +
+  theme_minimal(base_size = 13)
+
+print(p)
+
+```
+Column {data-width=50}
+#Natural spline for monthly national average
+```{r}
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(splines)
+
+# Step 1: Filter and prepare data
+spline_data <- data %>%
+  dplyr::filter(`Parameter Name` == "PM2.5 - Local Conditions") %>%
+  dplyr::select(`Arithmetic Mean`, `1st Max DateTime`) %>%
+  dplyr::filter(!is.na(`1st Max DateTime`)) %>%
+  mutate(Date = as.Date(`1st Max DateTime`)) %>%
+  dplyr::filter(!is.na(Date)) %>%
+  mutate(Month = floor_date(Date, "month")) %>%
+  group_by(Month) %>%
+  summarise(Average_PM25 = mean(`Arithmetic Mean`, na.rm = TRUE)) %>%
+  ungroup()
+
+# Step 2: Fit natural spline to monthly averages
+spline_data <- spline_data %>%
+  mutate(month_num = as.numeric(Month))
+
+spline_fit <- lm(Average_PM25 ~ ns(month_num, df = 5), data = spline_data)
+spline_data$Spline_Fit <- predict(spline_fit)
+
+# Step 3: Plot
+ggplot(spline_data, aes(x = Month)) +
+  geom_point(aes(y = Average_PM25), color = "#2980B9", alpha = 0.6) +
+  geom_line(aes(y = Spline_Fit), color = "#27AE60", size = 1.2) +
+  labs(
+    title = "Natural Cubic Spline of Monthly PM2.5 Across the U.S.",
+    x = "Month",
+    y = "Average PM2.5 (µg/m³)"
+  ) +
+  theme_minimal(base_size = 13)
+
+
+```
+#LOESS version of national monthly average
+```{r}
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+
+# Step 1: Filter and prepare PM2.5 data
+monthly_data <- data %>%
+  dplyr::filter(`Parameter Name` == "PM2.5 - Local Conditions") %>%
+  dplyr::filter(!is.na(`1st Max DateTime`)) %>%
+  mutate(Date = as.Date(`1st Max DateTime`)) %>%
+  mutate(Month = floor_date(Date, "month")) %>%
+  group_by(Month) %>%
+  summarise(Average_PM25 = mean(`Arithmetic Mean`, na.rm = TRUE)) %>%
+  ungroup()
+
+# Step 2: Plot with LOESS smoothing
+ggplot(monthly_data, aes(x = Month, y = Average_PM25)) +
+  geom_point(color = "#2980B9", alpha = 0.6) +
+  geom_smooth(method = "loess", se = FALSE, color = "#27AE60", span = 0.5) +
+  labs(
+    title = "Monthly PM2.5 Trends Across the U.S.",
+    x = "Month",
+    y = "Average PM2.5 (µg/m³)"
+  ) +
+  theme_minimal(base_size = 13)
+
+
+```
+
+------------------------------------------------------------------------
+
+# kNN
+
+## Column {data-width="650"}
+
+4.  k-Nearest Neighbors (kNN) Classification
+
+Research Question: Can we classify days as ‘High’ or ‘Low’ pollution
+based on observed metrics?
+
+Modeling Approach: • Response Variable: Pollution Level (categorical:
+‘High’ if Arithmetic Mean \> threshold, else ‘Low’) • Predictor
+Variables: 1st Max Value, 90th Percentile, Observation Count, Latitude,
+Longitude
+
+Justification: kNN can classify pollution levels based on similarity in
+observed features.
+```{r}
+library(class)       
+library(caret)       
+library(scales)    
+
+# create high/low pollution class
+knn_data <- data %>%
+  filter(`Parameter Name` == "PM2.5 - Local Conditions") %>%
+  select(`Arithmetic Mean`, `1st Max Value`, `90th Percentile`,
+         `Observation Count`, Latitude, Longitude) %>%
+  na.omit()
+
+# high/low classification
+threshold <- median(knn_data$`Arithmetic Mean`)
+knn_data$Pollution_Level <- ifelse(knn_data$`Arithmetic Mean` > threshold, "High", "Low")
+knn_data$Pollution_Level <- factor(knn_data$Pollution_Level)
+
+# Normalize predictors
+normalize <- function(x) {
+  return((x - min(x)) / (max(x) - min(x)))
+}
+knn_data_norm <- as.data.frame(lapply(knn_data[, 1:5], normalize))
+knn_data_norm$Pollution_Level <- knn_data$Pollution_Level
+
+# Train/Test Split
+set.seed(123)
+train_index <- sample(1:nrow(knn_data_norm), 0.8 * nrow(knn_data_norm))
+train_knn <- knn_data_norm[train_index, ]
+test_knn <- knn_data_norm[-train_index, ]
+
+# Run kNN model
+k_value <- 5
+knn_pred <- knn(train = train_knn[, 1:5],
+                test = test_knn[, 1:5],
+                cl = train_knn$Pollution_Level,
+                k = k_value)
+
+# Evaluation
+conf_mat <- confusionMatrix(knn_pred, test_knn$Pollution_Level)
+
+# Summary table
+summary_table <- data.frame(
+  Metric = c("Test Samples", "Accuracy", "K's Used"),
+  Value = c(nrow(test_knn), percent(conf_mat$overall["Accuracy"]), k_value)
+)
+
+```
+
+### Confusion Matrix
+
+```{r}
+# Create confusion matrix table
+cm_table <- as.data.frame(conf_mat$table)
+
+ggplot(cm_table, aes(Prediction, Reference)) +
+  geom_tile(aes(fill = Freq), color = "white") +
+  geom_text(aes(label = Freq), vjust = 1.2, size = 6) +
+  scale_fill_gradient(low = "#DCEEFF", high = "#1E4E79") +
+  labs(title = "kNN Confusion Matrix", x = "Predicted", y = "Actual") +
+  theme_minimal()
+
+```
+
+------------------------------------------------------------------------
+
+Naive Bayes
+===================================== 
+
+## Overview
+
+- **Research Question:** Can we predict the pollutant type (`Parameter Name`) based on statistical features?
+- **Modeling Approach:** Naive Bayes classifier, using predictors: Arithmetic Mean, 1st Max Value, 90th Percentile, Observation Count, etc.
+- **Justification:** Naive Bayes is effective for multi-class classification with categorical outcomes.
+
+
+```{r}
+library(e1071) # For naive bayes
+
+# Selecting relvant columns and removing NANs
+nb_data <- data %>%
+  select(`Parameter Name`,
+         `Arithmetic Mean`, `1st Max Value`, `90th Percentile`, `Observation Count`,
+         `POC`, `Latitude`, `Longitude`,
+         `Sample Duration`, `Metric Used`, `Method Name`, `Observation Percent`,
+         `Completeness Indicator`, `Required Day Count`, `Year`, `Units of Measure`, `Event Type`) %>%
+  na.omit()
+
+# Convert Response to factor
+nb_data$`Parameter Name` = as.factor(nb_data$`Parameter Name`)
+
+# Train/Test split
+set.seed(1)
+split_idx = sample(1:nrow(nb_data), size = 0.8 * nrow(nb_data))
+train_data = nb_data[split_idx, ]
+test_data = nb_data[-split_idx, ]
+
+# Naive Bayes Model
+nb_model = naiveBayes(`Parameter Name` ~ ., data = train_data)
+
+# Predict on test set
+nb_pred = predict(nb_model, test_data)
+
+# Create summary table
+results <- data.frame(
+  Actual = test_data$`Parameter Name`,
+  Predicted = nb_pred
+)
+
+accuracy <- mean(results$Actual == results$Predicted)
+summary_table <- data.frame(
+  Metric = c("Total Test Samples", "Overall Accuracy"),
+  Value = c(nrow(results), paste0(round(accuracy * 100, 2), "%"))
+)
+
+# kbl(summary_table) %>%
+#   kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+### Top 10 Most Frequently Predicted Pollutant Types
+
+```{r}
+predicted_summary <- results %>%
+  count(Predicted, sort = TRUE) %>%
+  head(10)
+
+kbl(predicted_summary) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+### Misclassification Table (Top Errors)
+
+```{r}
+error_counts <- results %>%
+  filter(Actual != Predicted) %>%
+  count(Actual, Predicted, sort = TRUE) %>%
+  top_n(5, n)
+
+if (nrow(error_counts) > 0) {
+  kbl(error_counts, caption = "Top 5 Misclassifications") %>%
+    kable_styling(bootstrap_options = c("striped", "hover"))
+} else {
+  print("No major misclassifications to display.")
+}
+```
+
+Column {data-width=350}
+-----------------------------------------------------------------------
+
+```{r, height=300}
+# plot
+
+error_counts <- results %>%
+  filter(Actual != Predicted) %>%
+  count(Actual, Predicted, sort = TRUE) %>%
+  top_n(10, n)
+
+if (nrow(error_counts) > 0) {
+  ggplot(error_counts, aes(x = reorder(paste(Actual, "->", Predicted), n), y = n, fill = n)) +
+    geom_col() +
+    coord_flip() +
+    scale_fill_gradient(low = "#DDEBF7", high = "#2E75B6") +
+    labs(title = "Top 10 Misclassifications", x = "Actual -> Predicted", y = "Count") +
+    theme_minimal()
+} else {
+  print("No major misclassifications to display.")
+}
+```
+
+### Discussion and Visualization
+
+The Naive Bayes classifier achieved an overall accuracy of **`r round(accuracy * 100, 2)`%**.
+
+
+
+------------------------------------------------------------------------
+
+Logistic Regression
+===================================== 
+
+## Overview
+
+- **Research Question:** What factors influence the likelihood of exceeding primary pollutant standards?
+- **Modeling Approach:** 
+  - **Response Variable:** Exceedance (binary: 1 if `Primary Exceedance Count` \> 0, else 0) 
+  - **Predictor Variables:** Arithmetic Mean, 1st Max Value, Observation Count, Parameter Name (encoded)
+- **Justification:** Logistic regression models the probability of a binary outcome based on predictor variables.
+
+---
+
+```{r}
+logit_data = data %>%
+  mutate(Exceedance = ifelse(`Primary Exceedance Count` > 0, 1, 0)) %>%
+  select(Exceedance, `Arithmetic Mean`, `1st Max Value`, `Observation Count`, `Parameter Name`) %>%
+  na.omit()
+
+logit_data$Exceedance = as.factor(logit_data$Exceedance)
+logit_data$`Parameter Name` = as.factor(logit_data$`Parameter Name`)
+
+
+# test train split
+set.seed(1)
+split_idx = sample(1:nrow(logit_data), size = 0.8 * nrow(logit_data))
+train_data = logit_data[split_idx, ]
+test_data = logit_data[-split_idx, ]
+
+# logistic regression
+logit_model = glm(Exceedance ~ `Arithmetic Mean` + `1st Max Value` + `Observation Count` + `Parameter Name`,
+                   data = train_data, family = binomial)
+logit_probs = predict(logit_model, newdata = test_data, type = "response")
+logit_pred = ifelse(logit_probs > 0.5, 1, 0)
+actual = as.numeric(as.character(test_data$Exceedance))
+
+# accuracy
+accuracy = mean(logit_pred == actual)
+summary_table = data.frame(
+  Metric = c("Total Test Samples", "Overall Accuracy"),
+  Value = c(length(actual), paste0(round(accuracy * 100, 2), "%"))
+)
+
+kbl(summary_table, caption = "Logistic Regression Model Performance") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+```
+
+### Coefficient Summary
+
+```{r}
+tidy_summary = broom::tidy(logit_model)
+
+kbl(tidy_summary, caption = "Logistic Regression Coefficients") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+### Discussion
+
+The logistic regression model achieved an overall accuracy of **`r round(accuracy * 100, 2)`%**.
+
+---
+
+## Visuals {data-width="350"}
+
+### Coefficients
+
+```{r}
+library(broom)
+
+tidy_summary = tidy_summary %>%
+  mutate(
+    conf.low = estimate - 1.96 * std.error,
+    conf.high = estimate + 1.96 * std.error
+  )
+
+ggplot(tidy_summary, aes(x = estimate, y = reorder(term, estimate))) +
+  geom_point(size = 2, color = "#2E75B6") +
+  geom_errorbarh(aes(xmin = conf.low, xmax = conf.high), height = 0.2, color = "#2E75B6") +
+  labs(x = "Estimate (log-odds)", y = "Predictor") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray") +
+  theme_minimal()
+```
+
+### Probalities vs Arithmetic Mean
+
+```{r, message=FALSE, warning=FALSE}
+plot_df = test_data
+plot_df$Predicted_Prob = logit_probs
+
+ggplot(plot_df, aes(x = `Arithmetic Mean`, y = Predicted_Prob)) +
+  geom_point(aes(color = as.factor(Exceedance)), alpha = 0.4) +
+  geom_smooth(method = "loess", se = FALSE, color = "blue") +
+  labs(x = "Arithmetic Mean Concentration",
+       y = "Predicted Probability of Exceedance",
+       color = "Actual Exceedance") +
+  theme_minimal()
+```
