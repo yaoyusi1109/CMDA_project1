@@ -8,9 +8,8 @@ output:
     self_contained: true
     theme:
       version: 5
-      bootswatch: flatly
-      base_font:
-        google: Prompt
+      bootswatch: darkly  
+      base_font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif  # GitHub's font stack
       code_font:
         google: JetBrains Mono
     css: custom.css
@@ -36,6 +35,12 @@ library(viridis)
 ```{r data_load, echo=FALSE, message=FALSE}
 data <- read_csv("data/annual_conc_by_monitor_2024.csv")
 ```
+
+
+
+
+
+
 
 Introduction & Abstract
 ===================================== 
@@ -95,6 +100,12 @@ leaflet(data) %>%
     popup = ~paste("Pollutant:", `Parameter Name`, "<br>Mean:", `Arithmetic Mean`)
   )
 ```
+
+
+
+
+
+
 
 Multiple Regression {data-navmenu="MLR" data-icon="fa-chart-line"}
 ===================================== 
@@ -209,43 +220,132 @@ leaflet(pm25_data) %>%
 
 
 
-Ridge Regression {#ridge-regression data-navmenu="MLR" data-icon="fa-line-chart"}
+
+
+
+
+
+Ridge Regression
 ===================================== 
 
-```{r ridge_setup, include=FALSE}
-# Ensure glmnet is installed
-if (!requireNamespace("glmnet", quietly = TRUE)) {
-  install.packages("glmnet")
-}
-library(glmnet)
-library(plotly)
-library(reshape2) # For melt function in correlation heatmap
-```
-
-Column {data-width=650}
+Row {data-height=150}
 -------------------------------------
 
-### Ridge Regression
-
-**Research Question**: Can Ridge Regression improve the prediction of PM2.5 concentrations by accounting for multicollinearity among a diverse set of air quality and monitoring metrics over time?
-
-**Modeling Approach**:  
-- **Response Variable**: Arithmetic Mean  
-- **Predictor Variables**: 1st Max Value, 2nd Max Value, 3rd Max Value, 4th Max Value, 90th Percentile, 75th Percentile, 50th Percentile, 10th Percentile, Observation Count, Observation Percent, Year  
-
-**Justification**: The selected predictors include highly correlated air quality metrics and monitoring indicators, which may introduce multicollinearity. Ridge Regression’s L2 regularization can stabilize the model, and incorporating Year allows exploration of temporal trends.
-
-### Ridge Regression Results
-
+### Compute Model {data-width=400}
 ```{r ridge_model}
-# Filter to only PM2.5 observations and select relevant predictors
+# Ensure all required packages are loaded
+if (!requireNamespace("glmnet", quietly = TRUE)) {
+  message("Installing glmnet...")
+  install.packages("glmnet")
+}
+if (!requireNamespace("plotly", quietly = TRUE)) {
+  message("Installing plotly...")
+  install.packages("plotly")
+}
+if (!requireNamespace("reshape2", quietly = TRUE)) {
+  message("Installing reshape2...")
+  install.packages("reshape2")
+}
+if (!requireNamespace("lubridate", quietly = TRUE)) {
+  message("Installing lubridate...")
+  install.packages("lubridate")
+}
+
+# Load the packages
+library(glmnet)
+library(plotly)
+library(reshape2)
+library(lubridate)
+
+# Confirm packages are loaded
+message("Packages loaded: glmnet, plotly, reshape2, lubridate")
+
+# Dynamically detect column names for State Code, County Code, and Site Num
+possible_state_cols <- c("State Code", "State_Code", "STATE_CODE")
+possible_county_cols <- c("County Code", "County_Code", "COUNTY_CODE")
+possible_site_cols <- c("Site Num", "Site_Num", "SITE_NUM")
+
+state_col <- intersect(possible_state_cols, colnames(data))
+county_col <- intersect(possible_county_cols, colnames(data))
+site_col <- intersect(possible_site_cols, colnames(data))
+
+if (length(state_col) == 0 || length(county_col) == 0 || length(site_col) == 0) {
+  stop("Error: Could not find columns for State Code, County Code, or Site Num. Available columns: ", paste(colnames(data), collapse = ", "))
+}
+
+# Use the detected column names
+state_col <- state_col[1]
+county_col <- county_col[1]
+site_col <- site_col[1]
+
+# Filter to PM2.5 24-hour block average observations and select relevant predictors
 ridge_data <- data %>%
-  filter(`Parameter Name` == "PM2.5 - Local Conditions") %>%
-  select(`Arithmetic Mean`, `1st Max Value`, `2nd Max Value`, `3rd Max Value`, 
-         `4th Max Value`, `90th Percentile`, `75th Percentile`, 
-         `50th Percentile`, `10th Percentile`, `Observation Count`, 
-         `Observation Percent`, Year) %>%
-  na.omit()
+  filter(`Parameter Name` == "PM2.5 - Local Conditions" & `Sample Duration` == "24-HR BLK AVG") %>%
+  mutate(Month = lubridate::month(as.Date(`Date of Last Change`))) %>%
+  select(`Arithmetic Mean`, `1st Max Value`, `90th Percentile`, `75th Percentile`, 
+         `50th Percentile`, `Observation Count`, `Observation Percent`, 
+         `Latitude`, `Longitude`, `Year`, `Month`, 
+         !!sym(state_col), !!sym(county_col), !!sym(site_col))
+
+# Aggregate meteorological data to avoid duplicate entries
+meteo_data <- data %>%
+  filter(`Parameter Name` %in% c("Outdoor Temperature", "Relative Humidity", 
+                                 "Wind Speed - Resultant", "Barometric Pressure", 
+                                 "Solar Radiation", "Rain/melt Precipitation")) %>%
+  group_by(!!sym(state_col), !!sym(county_col), !!sym(site_col), `Parameter Name`) %>%
+  summarise(`Arithmetic Mean` = mean(`Arithmetic Mean`, na.rm = TRUE), .groups = "drop") %>%
+  tidyr::pivot_wider(names_from = `Parameter Name`, values_from = `Arithmetic Mean`)
+
+# Check number of sites before and after join
+cat("**Number of Sites Before Join:** ", nrow(ridge_data), "  \n")
+ridge_data_before_join <- ridge_data
+ridge_data <- ridge_data %>%
+  left_join(meteo_data, by = c(state_col, county_col, site_col))
+
+# Preserve Year and Month before na.omit()
+ridge_data <- ridge_data %>%
+  mutate(Year = ridge_data_before_join$Year,
+         Month = ridge_data_before_join$Month)
+
+ridge_data <- ridge_data %>% na.omit()
+cat("**Number of Sites After Join:** ", nrow(ridge_data), "  \n")
+
+# Check if ridge_data is empty
+if (nrow(ridge_data) == 0) {
+  message("Warning: No data available after joining meteorological variables. Using only PM2.5-related predictors.")
+  ridge_data <- data %>%
+    filter(`Parameter Name` == "PM2.5 - Local Conditions" & `Sample Duration` == "24-HR BLK AVG") %>%
+    mutate(Month = lubridate::month(as.Date(`Date of Last Change`))) %>%
+    select(`Arithmetic Mean`, `1st Max Value`, `90th Percentile`, `75th Percentile`, 
+           `50th Percentile`, `Observation Count`, `Observation Percent`, 
+           `Latitude`, `Longitude`, `Year`, `Month`, 
+           !!sym(state_col), !!sym(county_col), !!sym(site_col)) %>%
+    na.omit()
+  cat("**Number of Sites (PM2.5 Fallback):** ", nrow(ridge_data), "  \n")
+}
+
+# Number of sites per state
+sites_per_state <- ridge_data %>%
+  group_by(!!sym(state_col)) %>%
+  summarise(Count = n()) %>%
+  mutate(State = as.character(!!sym(state_col)))
+cat("**Sites per State:**  \n")
+for (i in 1:nrow(sites_per_state)) {
+  cat("State ", sites_per_state$State[i], ": ", sites_per_state$Count[i], " sites  \n")
+}
+
+# Dynamically select predictor columns that exist in ridge_data
+predictor_cols <- intersect(
+  c("Outdoor Temperature", "Relative Humidity", "Wind Speed - Resultant", 
+    "Barometric Pressure", "Solar Radiation", "Rain/melt Precipitation", 
+    "1st Max Value", "90th Percentile", "75th Percentile", "50th Percentile", 
+    "Observation Count", "Observation Percent", "Latitude", "Longitude", "Year", "Month"),
+  colnames(ridge_data)
+)
+
+# Ensure all predictor columns are numeric
+ridge_data <- ridge_data %>%
+  mutate(across(.cols = all_of(predictor_cols), .fns = as.numeric))
 
 # Prepare the predictor matrix and response variable
 X <- model.matrix(`Arithmetic Mean` ~ . - 1, data = ridge_data) # Exclude intercept
@@ -266,69 +366,302 @@ ridge_coefs <- coef(ridge_model) %>%
   rename(Coefficient = s0) %>%
   mutate(Coefficient = round(Coefficient, 4))
 
+# Compute predictions for summary
+ridge_data$predicted <- predict(ridge_model, newx = X)
+
+# Display computation summary
+cat("**Model Computed Successfully**  \n")
+cat("**Predictors Used:**  \n")
+# Split predictors into smaller chunks to avoid overflow
+predictor_chunks <- split(predictor_cols, ceiling(seq_along(predictor_cols)/5))
+for (chunk in predictor_chunks) {
+  cat(paste(chunk, collapse = ", "), "  \n")
+}
+cat("**Selected Lambda (Cross-Validation):** ", round(cv_model$lambda.min, 4), "  \n")
+cat("**Predicted PM2.5 Range:** ", round(min(ridge_data$predicted, na.rm = TRUE), 2), " to ", 
+    round(max(ridge_data$predicted, na.rm = TRUE), 2), " µg/m³  \n")
+```
+
+### Average Predicted PM2.5 {data-width=200}
+```{r value_box_avg_predicted}
+# Compute average predicted PM2.5
+avg_predicted <- mean(ridge_data$predicted, na.rm = TRUE)
+valueBox(round(avg_predicted, 2), icon = "fa-poll", color = "info")
+```
+
+### Number of Sites Analyzed {data-width=200}
+```{r value_box_num_sites}
+# Compute number of unique sites
+num_sites <- nrow(ridge_data)
+valueBox(num_sites, icon = "fa-map-marker-alt", color = "success")
+```
+
+### Data Coverage Period {data-width=200}
+```{r value_box_year}
+# Show the year of data
+year_range <- unique(ridge_data$Year)
+valueBox(year_range, icon = "fa-calendar", color = "warning")
+```
+
+Row {data-height=600}
+-------------------------------------
+
+### 3D Visualization of PM2.5 Trends {data-width=800}
+
+```{r interactive_3d_plot, fig.width=12, fig.height=8}
+# Debug: Verify data availability
+message("Columns in ridge_data for 3D plot: ", paste(colnames(ridge_data), collapse = ", "))
+message("Unique States in ridge_data: ", paste(unique(ridge_data[[state_col]]), collapse = ", "))
+
+# Prepare plot data
+plot_data <- ridge_data %>%
+  select(`Outdoor Temperature`, `Relative Humidity`, predicted, Latitude, `Wind Speed - Resultant`, 
+         !!sym(state_col), !!sym(county_col), !!sym(site_col)) %>%
+  mutate(across(.cols = everything(), .fns = as.numeric)) %>%
+  na.omit()
+
+message("Rows in plot_data for 3D plot: ", nrow(plot_data))
+
+if (nrow(plot_data) == 0) {
+  message("No data available for 3D plot with meteorological variables. Switching to PM2.5 predictors.")
+  plot_data <- ridge_data %>%
+    select(`1st Max Value`, `90th Percentile`, predicted, Latitude, `Observation Count`, 
+           !!sym(state_col), !!sym(county_col), !!sym(site_col)) %>%
+    mutate(across(.cols = everything(), .fns = as.numeric)) %>%
+    na.omit()
+  message("Rows in plot_data (PM2.5 fallback): ", nrow(plot_data))
+  
+  if (nrow(plot_data) == 0) {
+    stop("Error: No data available for 3D plot even with PM2.5 predictors.")
+  }
+
+  # Get unique states
+  states <- unique(plot_data[[state_col]])
+  message("Number of states: ", length(states))
+
+  if (length(states) == 0) {
+    stop("Error: No states available for dropdown menu.")
+  }
+
+  # Create a trace for each state
+  traces <- lapply(states, function(state) {
+    state_data <- plot_data[plot_data[[state_col]] == state, ]
+    list(
+      x = state_data$`1st Max Value`,
+      y = state_data$`90th Percentile`,
+      z = state_data$predicted,
+      type = "scatter3d",
+      mode = "markers",
+      marker = list(
+        size = 5,
+        opacity = 0.7,
+        color = state_data$Latitude,
+        colorscale = "Viridis"
+      ),
+      text = paste("Site: ", state_data[[state_col]], "-", state_data[[county_col]], "-", state_data[[site_col]], 
+                   "<br>PM2.5: ", round(state_data$predicted, 2)),
+      hoverinfo = "text",
+      name = as.character(state),
+      visible = (state == states[1]) # Only the first state is visible initially
+    )
+  })
+
+  # Create dropdown buttons
+  buttons <- list()
+  buttons[[1]] <- list(
+    method = "restyle",
+    args = list("visible", rep(TRUE, length(states))),
+    label = "All States"
+  )
+  for (i in seq_along(states)) {
+    vis <- rep(FALSE, length(states))
+    vis[i] <- TRUE
+    buttons[[i + 1]] <- list(
+      method = "restyle",
+      args = list("visible", vis),
+      label = as.character(states[i])
+    )
+  }
+
+  # Debug: Check the structure of buttons
+  message("Number of buttons created: ", length(buttons))
+
+  # Build the plot
+  plot_3d <- plot_ly() %>%
+    htmlwidgets::onRender("function(el) { el.on('plotly_restyle', function() { el.layout.updatemenus[0].active = -1; }); }")
+
+  # Add traces dynamically
+  for (i in seq_along(traces)) {
+    plot_3d <- plot_3d %>% add_trace(
+      x = traces[[i]]$x,
+      y = traces[[i]]$y,
+      z = traces[[i]]$z,
+      type = traces[[i]]$type,
+      mode = traces[[i]]$mode,
+      marker = traces[[i]]$marker,
+      text = traces[[i]]$text,
+      hoverinfo = traces[[i]]$hoverinfo,
+      name = traces[[i]]$name,
+      visible = traces[[i]]$visible
+    )
+  }
+
+  plot_3d <- plot_3d %>%
+    layout(
+      title = list(text = "Predicted PM2.5 by Max Value, 90th Percentile, and Latitude", pad = list(t = 40)),
+      scene = list(
+        xaxis = list(title = "1st Max Value (µg/m³)"),
+        yaxis = list(title = "90th Percentile (µg/m³)"),
+        zaxis = list(title = "Predicted PM2.5 (µg/m³)"),
+        camera = list(eye = list(x = 1.5, y = 1.5, z = 1))
+      ),
+      showlegend = TRUE,
+      updatemenus = list(
+        list(
+          y = 0.9,
+          buttons = buttons
+        )
+      )
+    )
+} else {
+  # Get unique states
+  states <- unique(plot_data[[state_col]])
+  message("Number of states: ", length(states))
+
+  if (length(states) == 0) {
+    stop("Error: No states available for dropdown menu.")
+  }
+
+  # Create a trace for each state
+  traces <- lapply(states, function(state) {
+    state_data <- plot_data[plot_data[[state_col]] == state, ]
+    list(
+      x = state_data$`Outdoor Temperature`,
+      y = state_data$`Relative Humidity`,
+      z = state_data$predicted,
+      type = "scatter3d",
+      mode = "markers",
+      marker = list(
+        size = 5,
+        opacity = 0.7,
+        color = state_data$Latitude,
+        colorscale = "Viridis"
+      ),
+      text = paste("Site: ", state_data[[state_col]], "-", state_data[[county_col]], "-", state_data[[site_col]], 
+                   "<br>PM2.5: ", round(state_data$predicted, 2)),
+      hoverinfo = "text",
+      name = as.character(state),
+      visible = (state == states[1]) # Only the first state is visible initially
+    )
+  })
+
+  # Create dropdown buttons
+  buttons <- list()
+  buttons[[1]] <- list(
+    method = "restyle",
+    args = list("visible", rep(TRUE, length(states))),
+    label = "All States"
+  )
+  for (i in seq_along(states)) {
+    vis <- rep(FALSE, length(states))
+    vis[i] <- TRUE
+    buttons[[i + 1]] <- list(
+      method = "restyle",
+      args = list("visible", vis),
+      label = as.character(states[i])
+    )
+  }
+
+  # Debug: Check the structure of buttons
+  message("Number of buttons created: ", length(buttons))
+
+  # Build the plot
+  plot_3d <- plot_ly() %>%
+    htmlwidgets::onRender("function(el) { el.on('plotly_restyle', function() { el.layout.updatemenus[0].active = -1; }); }")
+
+  # Add traces dynamically
+  for (i in seq_along(traces)) {
+    plot_3d <- plot_3d %>% add_trace(
+      x = traces[[i]]$x,
+      y = traces[[i]]$y,
+      z = traces[[i]]$z,
+      type = traces[[i]]$type,
+      mode = traces[[i]]$mode,
+      marker = traces[[i]]$marker,
+      text = traces[[i]]$text,
+      hoverinfo = traces[[i]]$hoverinfo,
+      name = traces[[i]]$name,
+      visible = traces[[i]]$visible
+    )
+  }
+
+  plot_3d <- plot_3d %>%
+    layout(
+      title = list(text = "Predicted PM2.5 by Temperature, Humidity, and Latitude", pad = list(t = 40)),
+      scene = list(
+        xaxis = list(title = "Outdoor Temperature (°F)"),
+        yaxis = list(title = "Relative Humidity (%)"),
+        zaxis = list(title = "Predicted PM2.5 (µg/m³)"),
+        camera = list(eye = list(x = 1.5, y = 1.5, z = 1))
+      ),
+      showlegend = TRUE,
+      updatemenus = list(
+        list(
+          y = 0.9,
+          buttons = buttons
+        )
+      )
+    )
+}
+
+plot_3d
+```
+
+### Model Summary {data-width=400}
+
+**Research Question**: Can Ridge Regression effectively predict PM2.5 concentrations by accounting for multicollinearity among meteorological factors (e.g., temperature, relative humidity, wind speed) and air quality metrics, and how do these factors interact spatially and temporally to influence PM2.5 levels across monitoring sites?
+
+**Modeling Approach**:  
+- **Response Variable**: Arithmetic Mean (PM2.5, 24-hour block average)  
+- **Predictor Variables**: Outdoor Temperature, Relative Humidity, Wind Speed - Resultant, Barometric Pressure, Solar Radiation, Rain/melt Precipitation, 1st Max Value, 90th Percentile, 75th Percentile, 50th Percentile, Observation Count, Observation Percent, Latitude, Longitude, Year, Month (derived from Date of Last Change)  
+- **Justification**: Meteorological factors influence PM2.5 through atmospheric chemistry and dispersion, while air quality metrics capture exposure levels. Spatial and temporal variables account for geographic and seasonal trends. Ridge Regression’s L2 regularization addresses multicollinearity among correlated predictors (e.g., temperature and humidity).
+
+#### Model Coefficients
+```{r ridge_coefficients}
 # Display the coefficients in a table
 kbl(ridge_coefs, caption = "Ridge Regression Coefficients (lambda = min)") %>%
   kable_styling(bootstrap_options = c("striped", "hover"))
 ```
 
-Column {data-width=350}
+Row {data-height=400}
 -------------------------------------
 
-### Actual vs Predicted PM2.5 (Ridge)
-
+### Actual vs Predicted PM2.5 (Ridge) {data-width=500}
 ```{r ridge_actual_vs_predicted, fig.width=8, fig.height=8}
-# Predict using the Ridge model
-ridge_data$predicted <- predict(ridge_model, newx = X)
-
 # Plot: Actual vs Predicted
 ggplot(ridge_data, aes(x = `Arithmetic Mean`, y = predicted)) +
   geom_point(alpha = 0.3, color = "steelblue") +
   geom_abline(slope = 1, intercept = 0, color = "red", linetype = "dashed") +
-  labs(title = "Actual vs Predicted PM2.5 (Ridge)", x = "Actual", y = "Predicted") +
+  labs(title = "Actual vs Predicted PM2.5 (Ridge)", x = "Actual PM2.5 (µg/m³)", y = "Predicted PM2.5 (µg/m³)") +
   theme_minimal()
 ```
 
-### 3D Visualization of PM2.5 Trends
+### Predictor Correlation Heatmap {data-width=500}
+```{r ridge_correlation_heatmap, fig.width=10, fig.height=10}
+# Select available columns for correlation matrix
+available_cols <- intersect(
+  c("Outdoor Temperature", "Relative Humidity", "Wind Speed - Resultant", 
+    "Barometric Pressure", "Solar Radiation", "Rain/melt Precipitation", 
+    "1st Max Value", "90th Percentile", "75th Percentile", "50th Percentile", 
+    "Observation Count", "Observation Percent", "Latitude", "Longitude", "Year", "Month"),
+  colnames(ridge_data)
+)
 
-```{r ridge_3d_plot, fig.width=10, fig.height=10}
-library(plotly)
-library(viridis)
-
-plot_3d <- plot_ly(
-  data = ridge_data, 
-  x = ~Year, 
-  y = ~`1st Max Value`, 
-  z = ~`Arithmetic Mean`,
-  color = ~`Observation Percent`, 
-  colors = viridis(256),
-  type = "scatter3d", 
-  mode = "markers",
-  opacity = 0.6,
-  marker = list(size = 3)
-) %>%
-  layout(
-    title = list(text = "3D PM2.5 Trends by Year and Max Value"),
-    scene = list(
-      xaxis = list(title = "Year"),
-      yaxis = list(title = "1st Max Value"),
-      zaxis = list(title = "Arithmetic Mean")
-    )
-  )
-
-plot_3d
-```
-
-### Predictor Correlation Heatmap
-
-```{r ridge_correlation_heatmap, fig.width=10, fig.height=8}
-# Calculate correlation matrix for predictors
-cor_matrix <- cor(ridge_data[, c("1st Max Value", "2nd Max Value", "3rd Max Value", 
-                                 "4th Max Value", "90th Percentile", "75th Percentile", 
-                                 "50th Percentile", "10th Percentile", "Observation Count", 
-                                 "Observation Percent", "Year")])
+# Calculate correlation matrix for available predictors
+cor_matrix <- cor(ridge_data[, available_cols])
 
 # Create a heatmap with a cool color scheme
-ggplot(data = melt(cor_matrix), aes(x = Var1, y = Var2, fill = value)) +
+ggplot(data = reshape2::melt(cor_matrix), aes(x = Var1, y = Var2, fill = value)) +
   geom_tile(color = "white") +
   scale_fill_gradient2(low = "blue", mid = "white", high = "red", midpoint = 0,
                        name = "Correlation") +
@@ -337,11 +670,6 @@ ggplot(data = melt(cor_matrix), aes(x = Var1, y = Var2, fill = value)) +
         plot.title = element_text(hjust = 0.5)) +
   labs(title = "Correlation Heatmap of Predictors", x = "", y = "")
 ```
-
-
-
-
-
 
 
 
