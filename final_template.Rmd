@@ -94,8 +94,9 @@ Column {data-width=350}
 -------------------------------------
 
 ### Abstract
+*Page design authored by Xavier Akers*
 
-Welcome to the 2024 U.S. Environment Insights Dashboard. We analyze the 2024 EPA Annual Concentration dataset to reveal important insights about the air quality in the United States. By examining pollutant measurements from monitoring sites aaround the country, we find trends in the data that are significant for public health and environmental policy. Our statistical methods predict the results of air quality and provide insight on the factors that affect them. This data-driven initiative aligns with EPA's mission to protect the environment and achieve cleaner air for the public.
+Welcome to the 2024 U.S. Environment Insights Dashboard. We analyze the 2024 EPA Annual Concentration dataset to reveal important insights about the air quality in the United States. By examining pollutant measurements from monitoring sites around the country, we find trends in the data that are significant for public health and environmental policy. Our statistical methods predict the results of air quality and provide insight on the factors that affect them. This data-driven initiative aligns with EPA's mission to protect the environment and achieve cleaner air for the public.
 
 The data can be downloaded here [annual_conc_by_moinitor_2024.csv](https://drive.google.com/file/d/1VA5CdbeluNWSM6bxj-k1c8vU2GCBBbZi/view?usp=sharing) and is originally sourced from [EPA Pre-Generated Data File](https://aqs.epa.gov/aqsweb/airdata/download_files.html).
 
@@ -202,6 +203,7 @@ Column {data-width=500}
 -------------------------------------
 
 ### Multiple Linear Regression
+
 
 **Research Question**: Can we predict the annual average concentration (Arithmetic Mean) of PM2.5 based on location and temporal variables?
 
@@ -711,6 +713,8 @@ plot_3d
 
 ### Model Summary {data-width=400}
 
+*Analysis authored by Xavier Akers*
+
 **Research Question**: Can Ridge Regression effectively predict PM2.5 concentrations by accounting for multicollinearity among meteorological factors (e.g., temperature, relative humidity, wind speed) and air quality metrics, and how do these factors interact spatially and temporally to influence PM2.5 levels across monitoring sites?
 
 **Modeling Approach**:  
@@ -770,9 +774,6 @@ ggplot(data = reshape2::melt(cor_matrix), aes(x = Var1, y = Var2, fill = value))
 
 
 
-
-
-
 LOESS Fit 
 ===================================== 
 ```{r loess_setup, include=FALSE}
@@ -792,6 +793,8 @@ Column {data-width=600}
 -------------------------------------
 
 ### LOESS Fit for Seasonal PM2.5 Trends
+
+*Analysis authored by Xavier Akers*
 
 **Research Question**: How do seasonal variations in PM2.5 concentrations manifest at a specific monitoring site in 2024?
 
@@ -1033,6 +1036,7 @@ Naive Bayes
 ===================================== 
 
 ## Overview
+*Page design and analysis authored by Xavier Akers*
 
 - **Research Question:** Can we predict the pollutant type (`Parameter Name`) based on statistical features?
 - **Modeling Approach:** Naive Bayes classifier, using predictors: Arithmetic Mean, 1st Max Value, 90th Percentile, Observation Count, etc.
@@ -1142,6 +1146,7 @@ Logistic Regression
 ===================================== 
 
 ## Overview
+*Page design and analysis authored by Xavier Akers*
 
 - **Research Question:** What factors influence the likelihood of exceeding primary pollutant standards?
 - **Modeling Approach:** 
