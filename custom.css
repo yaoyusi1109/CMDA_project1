@@ -1,101 +1,25 @@
-.navbar {
-    margin-bottom: 5px;  /* default is around 20px */
-}
 
-.section {
-    margin-top: 5px;  /* tighten vertical spacing */
+/* custom.css */
+body, h1, h2, h3, h4, h5, h6 {
+  font-family: "Open Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
 }
-
-/* Ensure the entire dashboard matches GitHub's dark theme */
-body, html {
-  background-color: #0d1117 !important; /* GitHub's dark background */
-  color: #c9d1d9 !important; /* GitHub's light text */
+.chart-title, .section {
+  font-family: "Open Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
 }
-
-/* Target any potential container above the navbar */
-.chart-title, .navbar-container, .navbar-static-top {
-  background-color: #161b22 !important; /* Slightly lighter than the body background for contrast */
-  border-bottom: 1px solid #30363d !important; /* GitHub's border color */
+table {
+  border-collapse: collapse;
+  width: 100%;
 }
-
-/* Style the navigation bar to match GitHub */
-.navbar {
-  background-color: #161b22 !important; /* Slightly lighter than the body background for contrast */
-  border-bottom: 1px solid #30363d !important; /* GitHub's border color */
+th, td {
+  padding: 10px;
+  text-align: left;
+  border-bottom: 1px solid #ddd;
 }
-
-/* Style navigation bar brand and links */
-.navbar-brand, .navbar-nav .nav-link {
-  color: #c9d1d9 !important; /* Light text */
+th {
+  background-color: #1f77b4;
+  color: white;
+  font-weight: bold;
 }
-
-.navbar-nav .nav-link:hover, .navbar-nav .nav-link.active {
-  color: #ffffff !important; /* White text on hover/active */
-  background-color: #21262d !important; /* Slightly lighter background on hover/active */
-}
-
-/* Style dashboard sections to look like GitHub cards */
-.section {
-  background-color: #161b22; /* Slightly lighter than the body background */
-  border: 1px solid #30363d; /* GitHub's border color */
-  border-radius: 6px; /* Rounded corners */
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); /* Subtle shadow */
-  margin-bottom: 16px; /* Space between sections */
-  padding: 16px; /* Internal padding */
-}
-
-/* Style headers */
-.section h2 {
-  color: #c9d1d9; /* Light text for headers */
-  border-bottom: 1px solid #30363d; /* GitHub-style header underline */
-  padding-bottom: 8px;
-  margin-bottom: 16px;
-  font-weight: 600;
-}
-
-/* Style text within sections */
-.section p, .section pre {
-  color: #c9d1d9; /* Light text */
-}
-
-/* Style value boxes globally */
-.chart-stage .value-box {
-  background-color: #161b22; /* Card background */
-  border: 1px solid #30363d;
-  border-radius: 6px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-/* Style value box text and icons */
-.value-box .value-box-value {
-  color: #c9d1d9; /* Light text */
-}
-
-.value-box .value-box-title {
-  color: #8b949e; /* Slightly muted text for titles */
-}
-
-.value-box .icon {
-  color: #238636; /* GitHub's green accent for icons */
-}
-
-/* Style plotly plots globally */
-.plotly .plot-container {
-  background-color: #0d1117;
-}
-
-/* Style plotly dropdown menus globally */
-.plotly .dropdown-menu {
-  background-color: #161b22;
-  border: 1px solid #30363d;
-  border-radius: 6px;
-}
-
-.plotly .dropdown-menu .dropdown-item {
-  color: #c9d1d9;
-}
-
-.plotly .dropdown-menu .dropdown-item:hover {
-  background-color: #21262d;
-  color: #ffffff;
+tr:hover {
+  background-color: #f5f5f5;
 }

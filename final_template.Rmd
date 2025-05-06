@@ -1,6 +1,6 @@
 ---
 title: "U.S. Environment Insight"
-author: "Yusi Yao, Xavier Akers, Keshavd"
+author: "Yusi, Xavier"
 output:
   flexdashboard::flex_dashboard:
     orientation: columns
@@ -8,8 +8,8 @@ output:
     self_contained: true
     theme:
       version: 5
-      bootswatch: darkly  
-      base_font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif  # GitHub's font stack
+      bootswatch: lumen
+      base_font: '"Open Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif'
       code_font:
         google: JetBrains Mono
     css: custom.css
@@ -27,13 +27,43 @@ library(dplyr)
 library(kableExtra)
 library(DT)
 library(broom)
-library(viridis)
-# Install thematic and un-comment for themed static plots (i.e., ggplot2)
-# thematic::thematic_rmd()
-```
+library(viridisLite)
+library(splines)
+library(e1071)
+library(caret)
+library(glmnet)
+library(lubridate)
+library(highcharter)
 
-```{r data_load, echo=FALSE, message=FALSE}
 data <- read_csv("data/annual_conc_by_monitor_2024.csv")
+
+# Define custom Highcharter theme based on hc_theme_economist
+thm <- hc_theme_merge(
+  hc_theme_economist(),
+  hc_theme(
+    chart = list(
+      backgroundColor = "#ffffff",
+      style = list(fontFamily = "Open Sans")
+    ),
+    title = list(style = list(fontFamily = "Open Sans", fontSize = "18px")),
+    xAxis = list(
+      gridLineWidth = 1,
+      labels = list(style = list(fontFamily = "Open Sans"))
+    ),
+    yAxis = list(
+      labels = list(style = list(fontFamily = "Open Sans"))
+    ),
+    plotOptions = list(
+      series = list(
+        animation = list(duration = 1000),
+        dataLabels = list(style = list(fontFamily = "Open Sans"))
+      )
+    )
+  )
+)
+
+# Define a professional color palette
+colors <- c("#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd")
 ```
 
 
@@ -45,12 +75,13 @@ data <- read_csv("data/annual_conc_by_monitor_2024.csv")
 Introduction & Abstract
 ===================================== 
 
+
 Column {data-width=350}
 -------------------------------------
 
 ### Abstract
 
-This dashboard analyzes the EPA Annual Concentration dataset for 2024, summarizing pollutant measurements across U.S. monitoring sites. We explore geographic patterns, pollutant trends, and apply statistical models to understand air quality outcomes and predictors.
+Welcome to the U.S. Environment Insight dashboard, where we delve into the EPA's Annual Concentration dataset for 2024 to uncover critical insights into air quality across the nation. By analyzing pollutant measurements from monitoring sites, we aim to illuminate geographic patterns and temporal trends that are vital for public health and environmental policy. Our statistical models not only predict air quality outcomes but also provide a deeper understanding of the factors influencing them. This project aligns with the EPA's mission to protect human health and the environment, offering a data-driven perspective on the challenges and opportunities in achieving cleaner air for all—supporting initiatives like the Clean Air Act.
 
 ### Data Dictionary
 
@@ -92,14 +123,55 @@ Column {data-width=650}
 ### Map of Monitoring Stations
 
 ```{r monitoring_map}
-leaflet(data) %>%
-  addTiles() %>%
+# Aggregate data by unique monitoring site
+map_data <- data %>%
+  mutate(site_id = paste(`State Code`, `County Code`, `Site Num`, sep = "-")) %>%
+  group_by(site_id) %>%
+  summarise(
+    Longitude = mean(Longitude, na.rm = TRUE),
+    Latitude = mean(Latitude, na.rm = TRUE),
+    Mean_Concentration = mean(`Arithmetic Mean`, na.rm = TRUE),
+    Common_Pollutant = names(sort(table(`Parameter Name`), decreasing = TRUE))[1],
+    .groups = "drop"
+  ) %>%
+  filter(!is.na(Longitude) & !is.na(Latitude) & !is.na(Mean_Concentration) &
+         Longitude >= -180 & Longitude <= 180 & Latitude >= -90 & Latitude <= 90)
+
+pal <- colorNumeric(
+  palette = "YlOrRd",
+  domain = map_data$Mean_Concentration
+)
+
+leaflet(map_data, options = leafletOptions(minZoom = 3)) %>%
+  addProviderTiles("CartoDB.Positron") %>%
   addCircleMarkers(
     lng = ~Longitude, lat = ~Latitude,
-    radius = 1,
-    popup = ~paste("Pollutant:", `Parameter Name`, "<br>Mean:", `Arithmetic Mean`)
+    radius = 3,
+    color = ~pal(Mean_Concentration),
+    clusterOptions = markerClusterOptions(
+      spiderfyOnMaxZoom = TRUE,
+      showCoverageOnHover = TRUE,
+      zoomToBoundsOnClick = TRUE
+    ),
+    popup = ~paste("Pollutant:", Common_Pollutant, "<br>Mean:", round(Mean_Concentration, 2))
+  ) %>%
+  addLegend(
+    position = "bottomright",
+    pal = pal,
+    values = ~Mean_Concentration,
+    title = "Arithmetic Mean (µg/m³)",
+    opacity = 1
   )
 ```
+
+
+
+
+
+
+
+
+
 
 
 
@@ -110,7 +182,7 @@ leaflet(data) %>%
 Multiple Regression {data-navmenu="MLR" data-icon="fa-chart-line"}
 ===================================== 
 
-Column {data-width=650}
+Column {data-width=500}
 -------------------------------------
 
 ### Multiple Linear Regression
@@ -152,12 +224,12 @@ kbl(regression_summary, caption = "Multiple Linear Regression Coefficients") %>%
   kable_styling(bootstrap_options = c("striped", "hover"))
 ```
 
-Column {data-width=350}
+Column {data-width=500}
 -------------------------------------
 
 ### Actual vs Predicted PM2.5
 
-```{r actual_vs_predicted, fig.width=8, fig.height=8}
+```{r actual_vs_predicted, fig.width=10, fig.height=10}
 # Add fitted values and residuals
 pm25_data$predicted <- predict(lm_model)
 pm25_data$residuals <- resid(lm_model)
@@ -172,7 +244,7 @@ ggplot(pm25_data, aes(x = `Arithmetic Mean`, y = predicted)) +
 
 ### Residuals vs Fitted
 
-```{r residuals, fig.width=8, fig.height=8}
+```{r residuals, fig.width=10, fig.height=10}
 # Residuals vs Fitted Plot
 ggplot(pm25_data, aes(x = predicted, y = residuals)) +
   geom_point(alpha = 0.3, color = "darkorange") +
@@ -216,6 +288,14 @@ leaflet(pm25_data) %>%
     opacity = 1
   )
 ```
+
+
+
+
+
+
+
+
 
 
 
@@ -298,6 +378,7 @@ meteo_data <- data %>%
 
 # Check number of sites before and after join
 cat("**Number of Sites Before Join:** ", nrow(ridge_data), "  \n")
+message()
 ridge_data_before_join <- ridge_data
 ridge_data <- ridge_data %>%
   left_join(meteo_data, by = c(state_col, county_col, site_col))
@@ -405,7 +486,6 @@ valueBox(year_range, icon = "fa-calendar", color = "warning")
 
 Row {data-height=600}
 -------------------------------------
-
 ### 3D Visualization of PM2.5 Trends {data-width=800}
 
 ```{r interactive_3d_plot, fig.width=12, fig.height=8}
@@ -443,7 +523,7 @@ if (nrow(plot_data) == 0) {
     stop("Error: No states available for dropdown menu.")
   }
 
-  # Create a trace for each state
+  # Create a trace for each state, default to all visible
   traces <- lapply(states, function(state) {
     state_data <- plot_data[plot_data[[state_col]] == state, ]
     list(
@@ -462,7 +542,7 @@ if (nrow(plot_data) == 0) {
                    "<br>PM2.5: ", round(state_data$predicted, 2)),
       hoverinfo = "text",
       name = as.character(state),
-      visible = (state == states[1]) # Only the first state is visible initially
+      visible = TRUE # Set all traces to visible by default
     )
   })
 
@@ -519,7 +599,8 @@ if (nrow(plot_data) == 0) {
       updatemenus = list(
         list(
           y = 0.9,
-          buttons = buttons
+          buttons = buttons,
+          active = 0 # Set "All States" as the default active button
         )
       )
     )
@@ -532,7 +613,7 @@ if (nrow(plot_data) == 0) {
     stop("Error: No states available for dropdown menu.")
   }
 
-  # Create a trace for each state
+  # Create a trace for each state, default to all visible
   traces <- lapply(states, function(state) {
     state_data <- plot_data[plot_data[[state_col]] == state, ]
     list(
@@ -551,7 +632,7 @@ if (nrow(plot_data) == 0) {
                    "<br>PM2.5: ", round(state_data$predicted, 2)),
       hoverinfo = "text",
       name = as.character(state),
-      visible = (state == states[1]) # Only the first state is visible initially
+      visible = TRUE # Set all traces to visible by default
     )
   })
 
@@ -608,7 +689,8 @@ if (nrow(plot_data) == 0) {
       updatemenus = list(
         list(
           y = 0.9,
-          buttons = buttons
+          buttons = buttons,
+          active = 0 # Set "All States" as the default active button
         )
       )
     )
@@ -616,6 +698,9 @@ if (nrow(plot_data) == 0) {
 
 plot_3d
 ```
+
+
+
 
 ### Model Summary {data-width=400}
 
@@ -676,48 +761,258 @@ ggplot(data = reshape2::melt(cor_matrix), aes(x = Var1, y = Var2, fill = value))
 
 
 
+LOESS Fit 
+===================================== 
+```{r loess_setup, include=FALSE}
+library(highcharter)
+# Define custom Highcharter theme
+thm <- hc_theme(
+  colors = c("#1a6ecc", "#434348", "#90ed7d"),
+  chart = list(
+    backgroundColor = "transparent",
+    style = list(fontFamily = "Source Sans Pro")
+  ),
+  xAxis = list(gridLineWidth = 1)
+)
+```
+
+Column {data-width=600}
+-------------------------------------
+
+### LOESS Fit for Seasonal PM2.5 Trends
+
+**Research Question**: How do seasonal variations in PM2.5 concentrations manifest at a specific monitoring site in 2024?
+
+**Modeling Approach**:  
+- **Response Variable**: Arithmetic Mean (PM2.5 concentration)  
+- **Predictor Variable**: Month (derived from 1st Max DateTime)  
+- **Method**: LOESS smoothing with span = 0.75.
+
+**Justification**: LOESS captures non-linear seasonal patterns in air quality data.
+
+**Variables in Final Model**:  
+- **Arithmetic Mean**: PM2.5 concentration.  
+- **Month**: Numeric value (1-12) from `1st Max DateTime`.
+
+### LOESS Model Visualization
+
+```{r loess_fit, fig.height=8}
+loess_data <- data %>%
+  filter(`Parameter Name` == "PM2.5 - Local Conditions", `Site Num` == data$`Site Num`[1]) %>%
+  mutate(Month = as.numeric(format(as.Date(`1st Max DateTime`), "%m"))) %>%
+  select(`Arithmetic Mean`, Month) %>%
+  na.omit()
+
+loess_model <- loess(`Arithmetic Mean` ~ Month, data = loess_data, span = 0.75)
+loess_data$predicted <- predict(loess_model)
+
+highchart() %>%
+  hc_add_series(name = "Observed", type = "scatter", 
+                data = list_parse(data.frame(x = loess_data$Month, y = loess_data$`Arithmetic Mean`)),
+                color = "#90ed7d", marker = list(radius = 4)) %>%
+  hc_add_series(name = "LOESS Fit", type = "line", 
+                data = list_parse(data.frame(x = loess_data$Month, y = loess_data$predicted)),
+                color = "#1a6ecc", lineWidth = 2) %>%
+  hc_xAxis(title = list(text = "Month"), categories = month.abb, gridLineWidth = 1) %>%
+  hc_yAxis(title = list(text = "PM2.5 Concentration (µg/m³)")) %>%
+  hc_title(text = "Seasonal PM2.5 Trends with LOESS Fit") %>%
+  hc_add_theme(thm)
+```
+
+Column {.tabset data-width=400}
+-------------------------------------
+### Summary Statistics
+```{r}
+summary_stats <- loess_data %>%
+  summarise(
+    Mean_PM2.5 = round(mean(`Arithmetic Mean`), 2),
+    SD_PM2.5 = round(sd(`Arithmetic Mean`), 2),
+    Min_PM2.5 = round(min(`Arithmetic Mean`), 2),
+    Max_PM2.5 = round(max(`Arithmetic Mean`), 2)
+  ) %>%
+  tidyr::pivot_longer(everything(), names_to = "Metric", values_to = "Value")
+kbl(summary_stats, caption = "Summary Statistics for PM2.5 at Selected Site") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+### Distribution by Month
+```{r}
+highchart() %>%
+  hc_add_series(name = "PM2.5", type = "scatter",
+                data = list_parse(data.frame(x = loess_data$Month, y = loess_data$`Arithmetic Mean`)),
+                color = "#434348", marker = list(radius = 4)) %>%
+  hc_xAxis(title = list(text = "Month"), categories = month.abb) %>%
+  hc_yAxis(title = list(text = "PM2.5 Concentration (µg/m³)")) %>%
+  hc_title(text = "PM2.5 Distribution by Month") %>%
+  hc_add_theme(thm)
+```
 
 
 
 
 
 
-# Natural Spline or LOESS
 
-## Column {data-width="650"}
+kNN Classification 
+===================================== 
+```{r knn_setup, include=FALSE}
+library(caret)
+```
 
-3.  Natural Cubic Spline or LOESS Fit
+Column {data-width=600}
+-------------------------------------
 
-Research Question: How do PM2.5 concentrations vary over time within a
-specific location?
+### k-Nearest Neighbors Classification
 
-Modeling Approach: - Response Variable: Arithmetic Mean - Predictor
-Variable: Date (converted from 1st Max DateTime) - Method: Apply a
-natural cubic spline or LOESS smoothing to model temporal trends.
+**Research Question**: Can we classify monitoring sites as urban or rural based on air quality and spatial metrics in 2024?
 
-Justification: This approach captures non-linear temporal patterns in
-pollutant concentrations.
+**Modeling Approach**:  
+- **Response Variable**: Site Type (Urban if in a Core-Based Statistical Area, else Rural)  
+- **Predictor Variables**: Arithmetic Mean, 1st Max Value, 90th Percentile, Observation Count, Latitude, Longitude  
+- **Method**: kNN classification with k optimized via cross-validation.
 
-------------------------------------------------------------------------
+**Justification**: kNN classifies sites by leveraging similarities in air quality and spatial features, which differ between urban and rural areas.
 
-# kNN
+**Variables in Final Model**:  
+- **Site Type**: Binary response (Urban/Rural).  
+- **Arithmetic Mean**, **1st Max Value**, **90th Percentile**, **Observation Count**, **Latitude**, **Longitude**: Predictors.
 
-## Column {data-width="650"}
+### Model Performance
 
-4.  k-Nearest Neighbors (kNN) Classification
+```{r knn_model}
+knn_data <- data %>%
+  filter(`Parameter Name` == "PM2.5 - Local Conditions") %>%
+  mutate(Site_Type = factor(ifelse(is.na(`CBSA Name`), "Rural", "Urban"))) %>%
+  select(Site_Type, `Arithmetic Mean`, `1st Max Value`, `90th Percentile`, 
+         `Observation Count`, `Latitude`, `Longitude`) %>%
+  na.omit()
+set.seed(123)
+train_idx <- sample(1:nrow(knn_data), 0.8 * nrow(knn_data))
+train_data <- knn_data[train_idx, ]
+test_data <- knn_data[-train_idx, ]
+train_control <- trainControl(method = "cv", number = 5)
+knn_model <- train(Site_Type ~ ., data = train_data, method = "knn", 
+                   trControl = train_control, tuneGrid = expand.grid(k = 1:10))
+knn_pred <- predict(knn_model, test_data)
+results <- data.frame(Actual = test_data$Site_Type, Predicted = knn_pred)
+accuracy <- mean(results$Actual == results$Predicted)
+summary_table <- data.frame(
+  Metric = c("Total Test Samples", "Overall Accuracy", "Optimal k"),
+  Value = c(nrow(results), paste0(round(accuracy * 100, 2), "%"), knn_model$bestTune$k)
+)
+kbl(summary_table, caption = "kNN Model Performance") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+Column {.tabset data-width=400}
+-------------------------------------
+### Confusion Matrix
+```{r}
+library(highcharter)
+conf_matrix <- as.data.frame(table(Actual = results$Actual, Predicted = results$Predicted))
+# Prepare data for heatmap with tooltips
+heatmap_data <- lapply(1:nrow(conf_matrix), function(i) {
+  list(
+    x = as.numeric(factor(conf_matrix$Actual[i], levels = levels(conf_matrix$Actual))) - 1,
+    y = as.numeric(factor(conf_matrix$Predicted[i], levels = levels(conf_matrix$Predicted))) - 1,
+    value = conf_matrix$Freq[i],
+    custom = list(actual = conf_matrix$Actual[i], predicted = conf_matrix$Predicted[i])
+  )
+})
+# Define a fancier color gradient
+color_stops <- list(
+  list(0, "#ffffff"),
+  list(0.5, "#ff9999"),
+  list(1, "#d01010")
+)
+highchart() %>%
+  hc_chart(type = "heatmap", backgroundColor = "transparent") %>%
+  hc_add_series(name = "Confusion Matrix", type = "heatmap", data = heatmap_data, 
+                borderColor = "#434348", borderWidth = 1,
+                dataLabels = list(enabled = TRUE, color = "#ffffff", 
+                                  style = list(fontFamily = "Open Sans", fontSize = "14px", 
+                                               textOutline = "1px contrast"))) %>%
+  hc_xAxis(title = list(text = "Actual", style = list(fontFamily = "Open Sans")), 
+           categories = levels(conf_matrix$Actual), 
+           gridLineWidth = 1, 
+           labels = list(style = list(fontFamily = "Open Sans"))) %>%
+  hc_yAxis(title = list(text = "Predicted", style = list(fontFamily = "Open Sans")), 
+           categories = levels(conf_matrix$Predicted), 
+           labels = list(style = list(fontFamily = "Open Sans"))) %>%
+  hc_colorAxis(stops = color_stops, min = 0, 
+               labels = list(style = list(fontFamily = "Open Sans"))) %>%
+  hc_title(text = "Confusion Matrix", style = list(fontFamily = "Open Sans", fontSize = "18px")) %>%
+  hc_tooltip(formatter = JS("function() {
+    return '<b>Actual:</b> ' + this.point.custom.actual + '<br>' +
+           '<b>Predicted:</b> ' + this.point.custom.predicted + '<br>' +
+           '<b>Count:</b> ' + this.point.value;
+  }")) %>%
+  hc_plotOptions(series = list(
+    dataLabels = list(enabled = TRUE),
+    states = list(hover = list(enabled = TRUE, brightness = 0.1)),
+    shadow = list(color = "rgba(0,0,0,0.3)", width = 5, opacity = 0.2)
+  )) %>%
+  hc_add_theme(hc_theme_smpl())
+```
+### Distribution Plot
+```{r}
+library(highcharter)
+# Prepare data for Highcharter: group by Actual and Predicted to get counts
+dist_data <- results %>%
+  group_by(Actual, Predicted) %>%
+  summarise(Count = n()) %>%
+  ungroup()
 
-Research Question: Can we classify days as ‘High’ or ‘Low’ pollution
-based on observed metrics?
+# Create a list of series for Highcharter
+series_data <- lapply(unique(dist_data$Predicted), function(pred) {
+  subset <- dist_data %>% filter(Predicted == pred)
+  list(
+    name = pred,
+    data = lapply(1:nrow(subset), function(i) {
+      list(
+        x = as.numeric(factor(subset$Actual[i], levels = levels(dist_data$Actual))) - 1,
+        y = subset$Count[i],
+        custom = list(actual = subset$Actual[i], predicted = subset$Predicted[i])
+      )
+    }),
+    color = ifelse(pred == "Urban", "#d01010", "#90ed7d")
+  )
+})
 
-Modeling Approach: • Response Variable: Pollution Level (categorical:
-‘High’ if Arithmetic Mean \> threshold, else ‘Low’) • Predictor
-Variables: 1st Max Value, 90th Percentile, Observation Count, Latitude,
-Longitude
+highchart() %>%
+  hc_chart(type = "column") %>%
+  hc_add_series_list(series_data) %>%
+  hc_xAxis(title = list(text = "Actual Site Type", style = list(fontFamily = "Open Sans")), 
+           categories = levels(dist_data$Actual), 
+           labels = list(style = list(fontFamily = "Open Sans"))) %>%
+  hc_yAxis(title = list(text = "Count", style = list(fontFamily = "Open Sans")), 
+           labels = list(style = list(fontFamily = "Open Sans"))) %>%
+  hc_title(text = "Classification Distribution", style = list(fontFamily = "Open Sans", fontSize = "16px")) %>%
+  hc_plotOptions(column = list(
+    grouping = TRUE, 
+    pointPadding = 0.1, 
+    groupPadding = 0.2,
+    dataLabels = list(enabled = TRUE, 
+                      style = list(fontFamily = "Open Sans", fontSize = "12px", 
+                                   textOutline = "1px contrast"),
+                      color = "#ffffff"),
+    states = list(hover = list(enabled = TRUE, brightness = 0.1))
+  )) %>%
+  hc_tooltip(formatter = JS("function() {
+    return '<b>Actual:</b> ' + this.point.custom.actual + '<br>' +
+           '<b>Predicted:</b> ' + this.point.custom.predicted + '<br>' +
+           '<b>Count:</b> ' + this.y;
+  }")) %>%
+  hc_add_theme(hc_theme_smpl())
+```
 
-Justification: kNN can classify pollution levels based on similarity in
-observed features.
 
-------------------------------------------------------------------------
+
+
+
+
+
+
+
+
 
 Naive Bayes
 ===================================== 
