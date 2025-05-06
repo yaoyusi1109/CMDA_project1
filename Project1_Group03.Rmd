@@ -1,6 +1,6 @@
 ---
 title: "U.S. Environment Insight"
-author: "Group #3"
+author: "Yusi, Xavier"
 output:
   flexdashboard::flex_dashboard:
     orientation: columns
@@ -12,25 +12,11 @@ output:
       base_font: '"Open Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif'
       code_font:
         google: JetBrains Mono
+    css: custom.css
 editor_options: 
   markdown: 
     wrap: 72
 ---
-
-
-<style>
-
-.navbar {
-    margin-bottom: 5px;  /* default is around 20px */
-}
-
-.section {
-    margin-top: 5px;  /* tighten vertical spacing */
-}
-
-</style>
-
-
 
 ```{r setup, include=FALSE}
 library(flexdashboard)
@@ -95,9 +81,7 @@ Column {data-width=350}
 
 ### Abstract
 
-Welcome to the 2024 U.S. Environment Insights Dashboard. We analyze the 2024 EPA Annual Concentration dataset to reveal important insights about the air quality in the United States. By examining pollutant measurements from monitoring sites around the country, we find trends in the data that are significant for public health and environmental policy. Our statistical methods predict the results of air quality and provide insight on the factors that affect them. This data-driven initiative aligns with EPA's mission to protect the environment and achieve cleaner air for the public.
-
-The data can be downloaded here [annual_conc_by_moinitor_2024.csv](https://drive.google.com/file/d/1VA5CdbeluNWSM6bxj-k1c8vU2GCBBbZi/view?usp=sharing) and is originally sourced from [EPA Pre-Generated Data File](https://aqs.epa.gov/aqsweb/airdata/download_files.html).
+Welcome to the U.S. Environment Insight dashboard, where we delve into the EPA's Annual Concentration dataset for 2024 to uncover critical insights into air quality across the nation. By analyzing pollutant measurements from monitoring sites, we aim to illuminate geographic patterns and temporal trends that are vital for public health and environmental policy. Our statistical models not only predict air quality outcomes but also provide a deeper understanding of the factors influencing them. This project aligns with the EPA's mission to protect human health and the environment, offering a data-driven perspective on the challenges and opportunities in achieving cleaner air for all—supporting initiatives like the Clean Air Act.
 
 ### Data Dictionary
 
@@ -203,7 +187,6 @@ Column {data-width=500}
 
 ### Multiple Linear Regression
 
-
 **Research Question**: Can we predict the annual average concentration (Arithmetic Mean) of PM2.5 based on location and temporal variables?
 
 **Modeling Approach**:  
@@ -211,18 +194,6 @@ Column {data-width=500}
 - **Predictor Variables**: Latitude, Longitude, Year, Observation Count, 1st Max Value, 90th Percentile, 10th Percentile  
 
 **Justification**: This model aims to understand how geographical and temporal factors influence PM2.5 concentrations.
-
-**Discussion**: Our multiple linear regression investigate whether annual average PM2.5 (Arithmetic Mean) can be predicted from coordinates, observation count, and pollutant measurement percentiles.
-
-We find that all predictors except Year show statistically significant relationships with the response (\rho < 0.005). This suggests that spatial coordinates, observation volumes, and percentile values can meaningfully predict the PM2.5 concentration.
-
-**Interpretation**
-Northern locations tend to show lower PM2.5, while eastern location slightly increase it. This agrees with knowledge that many industries are established on the East Coast
-
-More observations slightly reduce the average, perhaps that the lack of monitoring stations are inaccurately reflecting the true distribution.
-
-**Limitations**
-We are assuming linearity, homoscedasticity, and no multicollinearity, which are unlikely to be true with the given data.
 
 ### Regression Results
 
@@ -342,11 +313,32 @@ Row {data-height=150}
 
 ### Compute Model {data-width=400}
 ```{r ridge_model}
+# Ensure all required packages are loaded
+if (!requireNamespace("glmnet", quietly = TRUE)) {
+  message("Installing glmnet...")
+  install.packages("glmnet")
+}
+if (!requireNamespace("plotly", quietly = TRUE)) {
+  message("Installing plotly...")
+  install.packages("plotly")
+}
+if (!requireNamespace("reshape2", quietly = TRUE)) {
+  message("Installing reshape2...")
+  install.packages("reshape2")
+}
+if (!requireNamespace("lubridate", quietly = TRUE)) {
+  message("Installing lubridate...")
+  install.packages("lubridate")
+}
+
 # Load the packages
 library(glmnet)
 library(plotly)
 library(reshape2)
 library(lubridate)
+
+# Confirm packages are loaded
+message("Packages loaded: glmnet, plotly, reshape2, lubridate")
 
 # Dynamically detect column names for State Code, County Code, and Site Num
 possible_state_cols <- c("State Code", "State_Code", "STATE_CODE")
@@ -717,12 +709,7 @@ plot_3d
 **Modeling Approach**:  
 - **Response Variable**: Arithmetic Mean (PM2.5, 24-hour block average)  
 - **Predictor Variables**: Outdoor Temperature, Relative Humidity, Wind Speed - Resultant, Barometric Pressure, Solar Radiation, Rain/melt Precipitation, 1st Max Value, 90th Percentile, 75th Percentile, 50th Percentile, Observation Count, Observation Percent, Latitude, Longitude, Year, Month (derived from Date of Last Change)  
-
 - **Justification**: Meteorological factors influence PM2.5 through atmospheric chemistry and dispersion, while air quality metrics capture exposure levels. Spatial and temporal variables account for geographic and seasonal trends. Ridge Regression’s L2 regularization addresses multicollinearity among correlated predictors (e.g., temperature and humidity).
-
-**Discussion**: Our Ridge Regression model examines whether PM2.5 (24 hour block average, *Arithmetic Mean*) can be predicted by spatial data, weather conditions, and air quality. This addresses the issues of multicollinearity from the MLR analysis.
-
-**Interpretation**: Meteorological conditions and air quality metrics jointly determine the PM2.5 levels, but site-level, country-level, and state-level factors (linked to local emission sources and regulations) also influence the PM2.5 levels. This regularization ensured temperature, humidity, and percentiles do not dominate the model due to multicolilinearity.
 
 #### Model Coefficients
 ```{r ridge_coefficients}
@@ -771,6 +758,9 @@ ggplot(data = reshape2::melt(cor_matrix), aes(x = Var1, y = Var2, fill = value))
 
 
 
+
+
+
 LOESS Fit 
 ===================================== 
 ```{r loess_setup, include=FALSE}
@@ -803,8 +793,6 @@ Column {data-width=600}
 **Variables in Final Model**:  
 - **Arithmetic Mean**: PM2.5 concentration.  
 - **Month**: Numeric value (1-12) from `1st Max DateTime`.
-
-**Discussion**: Analyzing how seasonal patterns affect PM2.t concentrations at monitoring site in 2024, we see that PM2.5 concentrations fluctuate across months, reflecting known seasonal factors influencing pollutants. Since LOESS adapts to non-linear seasonal changes, we can see a clearer picture of when air quality deteriorates or improves throughout the year.
 
 ### LOESS Model Visualization
 
@@ -888,7 +876,6 @@ Column {data-width=600}
 - **Site Type**: Binary response (Urban/Rural).  
 - **Arithmetic Mean**, **1st Max Value**, **90th Percentile**, **Observation Count**, **Latitude**, **Longitude**: Predictors.
 
-**Discussion**: The kNN model demonstrates that urban vs. rural site classification can be effectively performed using minimal air quality and spatial feature aching a 99.01% accuracy. This suggest that urban and rural sites are not overlapping regions in the feature space of PM2.5. We can determine the underlying pattern that urban areas have consistently higher levels of pollution and observation counts than rural areas, potentially due to high traffic and industrial activity, but also increase monitoring infrastructure.
 ### Model Performance
 
 ```{r knn_model}
@@ -921,6 +908,7 @@ Column {.tabset data-width=400}
 ```{r}
 library(highcharter)
 conf_matrix <- as.data.frame(table(Actual = results$Actual, Predicted = results$Predicted))
+# Prepare data for heatmap with tooltips
 heatmap_data <- lapply(1:nrow(conf_matrix), function(i) {
   list(
     x = as.numeric(factor(conf_matrix$Actual[i], levels = levels(conf_matrix$Actual))) - 1,
@@ -1035,6 +1023,7 @@ Naive Bayes
 - **Modeling Approach:** Naive Bayes classifier, using predictors: Arithmetic Mean, 1st Max Value, 90th Percentile, Observation Count, etc.
 - **Justification:** Naive Bayes is effective for multi-class classification with categorical outcomes.
 
+
 ```{r}
 library(e1071) # For naive bayes
 
@@ -1130,7 +1119,8 @@ if (nrow(error_counts) > 0) {
 
 ### Discussion and Visualization
 
-The model only achieved **`r round(accuracy * 100, 2)`%** accuracy when classifying monitoring sites as urban or rural on air quality and spatial features, indicating its assumption of feature independence does not hold. The model struggled to capture the complex patterns that separate urban and rural sites. Naive Bayes oversimplifies the relationships among environmental variables and we should use kNN instead.
+The Naive Bayes classifier achieved an overall accuracy of **`r round(accuracy * 100, 2)`%**.
+
 
 
 ------------------------------------------------------------------------
@@ -1194,7 +1184,7 @@ kbl(tidy_summary, caption = "Logistic Regression Coefficients") %>%
 
 ### Discussion
 
-The logistic regression model achieved an overall accuracy of **`r round(accuracy * 100, 2)`%** in predicting whether a site exceed primary pollutant standards. Observation Count showed significant positive effects on exceedance likelihood. However, most pollutant parameter categories (ozone, PM2.5, NO_2) had non-significant coefficients and were not meaningful to differentiate exceedance in this model. The results show that short-team peak pollution levels and observation intensity are the key features of exceedance risk.
+The logistic regression model achieved an overall accuracy of **`r round(accuracy * 100, 2)`%**.
 
 ---
 
@@ -1233,15 +1223,3 @@ ggplot(plot_df, aes(x = `Arithmetic Mean`, y = Predicted_Prob)) +
        color = "Actual Exceedance") +
   theme_minimal()
 ```
-
-Statement of Author Contributions
-===================================== 
-
-**Yusi Yao**: Constructed the general framework. Led the frontend design overhaul of the Introduction & Abstract section. Took responsibility for the Multiple Linear Regression (MLR), k-Nearest Neighbors (kNN), LOESS Fit, and Ridge Regression sections, contributing  to both the modeling and visualization aspects of these sections. 
-
-**Xavier Akers**: Developed the landing page. Contributed to the Naive Bayes and Logistic Regression sections, focusing on the implementation of these models and their respective visualizations. Xavier also supported in refining the analytical approaches and ensuring consistency across the dashboard sections.
-
-**Keshav Dwived**: Assisted in data preprocessing, ensuring the dataset was cleaned and prepared for analysis across all sections. Contributed to the documentation and interpretation of results in the LOESS Fit and kNN sections.
-
-
-
